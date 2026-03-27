@@ -1,0 +1,6 @@
+Single-database configuration for Flask-Migrate/Alembic.
+
+Use from backend directory:
+  flask --app app:create_app db upgrade
+  flask --app app:create_app db migrate -m "message"
+
