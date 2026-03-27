@@ -1,10 +1,11 @@
 import os
+import tempfile
 
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 
 from .config import config_by_name
-from .db.supabase_client import mask_database_uri
+from .db.supabase_client import build_database_uri, mask_database_uri
 from .extensions import db, jwt, migrate
 
 
@@ -46,9 +47,27 @@ def _register_blueprints(app: Flask) -> None:
 
 
 def create_app():
-    app = Flask(__name__)
+    # Vercel serverless: filesystem is read-only except /tmp — never use cwd for uploads/instance.
+    _on_vercel = os.environ.get("VERCEL") == "1"
+    flask_kw = {}
+    if _on_vercel:
+        flask_kw["instance_path"] = os.path.join(tempfile.gettempdir(), "mrv_instance")
+
+    app = Flask(__name__, **flask_kw)
     env_name = os.getenv("FLASK_ENV", "development")
     app.config.from_object(config_by_name.get(env_name, config_by_name["development"]))
+
+    if _on_vercel:
+        app.config["UPLOAD_FOLDER"] = os.path.join(tempfile.gettempdir(), "mrv_uploads")
+
+    db_url = os.environ.get("DATABASE_URL", "").strip()
+    if not db_url:
+        raise RuntimeError(
+            "DATABASE_URL is not set. Add it in Vercel: Project → Settings → "
+            "Environment Variables (Production / Preview as needed)."
+        )
+    app.config["SQLALCHEMY_DATABASE_URI"] = build_database_uri(db_url)
+
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False
     app.config["JWT_TOKEN_LOCATION"] = ["headers"]
     app.config["JWT_HEADER_NAME"] = "Authorization"

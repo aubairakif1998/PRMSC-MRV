@@ -3,8 +3,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .db.supabase_client import build_database_uri
-
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -42,8 +40,8 @@ class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key-123")
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "jwt-dev-key")
 
-    # Database (Supabase PostgreSQL only)
-    SQLALCHEMY_DATABASE_URI = build_database_uri(os.environ.get("DATABASE_URL", ""))
+    # Database (Supabase PostgreSQL only) — validated URI set in create_app()
+    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "") or ""
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,

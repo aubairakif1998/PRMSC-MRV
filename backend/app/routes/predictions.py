@@ -11,27 +11,48 @@ Endpoints:
 - POST /api/predictions/train - Retrain models
 """
 
+from functools import lru_cache
+from types import SimpleNamespace
+
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
-import pandas as pd
 
-from app.ai_models import (
-    prepare_water_dataset,
-    prepare_solar_dataset,
-    prepare_grid_dataset,
-    train_water_model,
-    predict_water_demand,
-    train_solar_model,
-    predict_solar_generation,
-    train_grid_model,
-    predict_grid_consumption,
-    fetch_water_data,
-    fetch_solar_data
-)
 from app.models.models import User, WaterSystem, SolarSystem
 
 predictions_bp = Blueprint('predictions', __name__, url_prefix='/api/predictions')
+
+
+@lru_cache(maxsize=1)
+def _prediction_ai() -> SimpleNamespace:
+    """Lazy-load pandas/sklearn (heavy); avoids slow/crashed cold starts on serverless."""
+    from app.ai_models import (
+        prepare_water_dataset,
+        prepare_solar_dataset,
+        prepare_grid_dataset,
+        train_water_model,
+        predict_water_demand,
+        train_solar_model,
+        predict_solar_generation,
+        train_grid_model,
+        predict_grid_consumption,
+        fetch_water_data,
+        fetch_solar_data,
+    )
+
+    return SimpleNamespace(
+        prepare_water_dataset=prepare_water_dataset,
+        prepare_solar_dataset=prepare_solar_dataset,
+        prepare_grid_dataset=prepare_grid_dataset,
+        train_water_model=train_water_model,
+        predict_water_demand=predict_water_demand,
+        train_solar_model=train_solar_model,
+        predict_solar_generation=predict_solar_generation,
+        train_grid_model=train_grid_model,
+        predict_grid_consumption=predict_grid_consumption,
+        fetch_water_data=fetch_water_data,
+        fetch_solar_data=fetch_solar_data,
+    )
 
 
 def get_location_filters():
@@ -95,13 +116,14 @@ def predict_water():
         "model_metrics": {...}
     }
     """
+    ai = _prediction_ai()
     data = request.get_json() or {}
     months = data.get('months', 6)
     tehsil = data.get('tehsil')
     village = data.get('village')
     
     # Prepare dataset
-    df = prepare_water_dataset(tehsil, village)
+    df = ai.prepare_water_dataset(tehsil, village)
     
     if df.empty:
         return jsonify({
@@ -122,7 +144,7 @@ def predict_water():
     
     # Generate predictions
     try:
-        predictions = predict_water_demand(df, months)
+        predictions = ai.predict_water_demand(df, months)
         
         return jsonify({
             'predictions': predictions,
@@ -146,12 +168,13 @@ def predict_solar():
     """
     Predict solar energy generation for future months.
     """
+    ai = _prediction_ai()
     data = request.get_json() or {}
     months = data.get('months', 6)
     tehsil = data.get('tehsil')
     village = data.get('village')
     
-    df = prepare_solar_dataset(tehsil, village)
+    df = ai.prepare_solar_dataset(tehsil, village)
     
     if df.empty:
         return jsonify({
@@ -170,7 +193,7 @@ def predict_solar():
         })
     
     try:
-        predictions = predict_solar_generation(df, months)
+        predictions = ai.predict_solar_generation(df, months)
         
         return jsonify({
             'predictions': predictions,
@@ -194,12 +217,13 @@ def predict_grid():
     """
     Predict grid electricity consumption for future months.
     """
+    ai = _prediction_ai()
     data = request.get_json() or {}
     months = data.get('months', 6)
     tehsil = data.get('tehsil')
     village = data.get('village')
     
-    df = prepare_grid_dataset(tehsil, village)
+    df = ai.prepare_grid_dataset(tehsil, village)
     
     if df.empty:
         return jsonify({
@@ -218,7 +242,7 @@ def predict_grid():
         })
     
     try:
-        predictions = predict_grid_consumption(df, months)
+        predictions = ai.predict_grid_consumption(df, months)
         
         return jsonify({
             'predictions': predictions,
@@ -242,6 +266,7 @@ def predict_all():
     """
     Get all predictions in one call.
     """
+    ai = _prediction_ai()
     data = request.get_json() or {}
     months = data.get('months', 6)
     tehsil = data.get('tehsil')
@@ -251,10 +276,10 @@ def predict_all():
     
     # Water demand
     try:
-        df = prepare_water_dataset(tehsil, village)
+        df = ai.prepare_water_dataset(tehsil, village)
         if not df.empty:
             result['water_demand'] = {
-                'predictions': predict_water_demand(df, months),
+                'predictions': ai.predict_water_demand(df, months),
                 'has_data': True
             }
         else:
@@ -264,10 +289,10 @@ def predict_all():
     
     # Solar generation
     try:
-        df = prepare_solar_dataset(tehsil, village)
+        df = ai.prepare_solar_dataset(tehsil, village)
         if not df.empty:
             result['solar_generation'] = {
-                'predictions': predict_solar_generation(df, months),
+                'predictions': ai.predict_solar_generation(df, months),
                 'has_data': True
             }
         else:
@@ -277,10 +302,10 @@ def predict_all():
     
     # Grid consumption
     try:
-        df = prepare_grid_dataset(tehsil, village)
+        df = ai.prepare_grid_dataset(tehsil, village)
         if not df.empty:
             result['grid_consumption'] = {
-                'predictions': predict_grid_consumption(df, months),
+                'predictions': ai.predict_grid_consumption(df, months),
                 'has_data': True
             }
         else:
@@ -305,6 +330,7 @@ def train_models():
     if current_user.role not in ['analyst', 'environment_manager']:
         return jsonify({'error': 'Access denied. Only analysts can retrain models.'}), 403
     
+    ai = _prediction_ai()
     data = request.get_json() or {}
     tehsil = data.get('tehsil')
     village = data.get('village')
@@ -313,9 +339,9 @@ def train_models():
     
     # Train water model
     try:
-        df = prepare_water_dataset(tehsil, village)
+        df = ai.prepare_water_dataset(tehsil, village)
         if not df.empty:
-            result = train_water_model(df)
+            result = ai.train_water_model(df)
             results['water_demand'] = {
                 'status': 'success',
                 'metrics': result['metrics']
@@ -327,9 +353,9 @@ def train_models():
     
     # Train solar model
     try:
-        df = prepare_solar_dataset(tehsil, village)
+        df = ai.prepare_solar_dataset(tehsil, village)
         if not df.empty:
-            result = train_solar_model(df)
+            result = ai.train_solar_model(df)
             results['solar_generation'] = {
                 'status': 'success',
                 'metrics': result['metrics']
@@ -341,9 +367,9 @@ def train_models():
     
     # Train grid model
     try:
-        df = prepare_grid_dataset(tehsil, village)
+        df = ai.prepare_grid_dataset(tehsil, village)
         if not df.empty:
-            result = train_grid_model(df)
+            result = ai.train_grid_model(df)
             results['grid_consumption'] = {
                 'status': 'success',
                 'metrics': result['metrics']
