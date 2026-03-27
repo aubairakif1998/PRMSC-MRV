@@ -1,9 +1,40 @@
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 
 from .db.supabase_client import build_database_uri
 
-load_dotenv()
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_env() -> None:
+    """Load .env then .env.production so production can use a dedicated file."""
+    load_dotenv(_BACKEND_ROOT / ".env")
+    prod = _BACKEND_ROOT / ".env.production"
+    if prod.is_file():
+        load_dotenv(prod, override=True)
+
+
+_load_env()
+
+
+def _parse_cors_origins() -> list[str]:
+    """
+    Comma-separated CORS_ORIGINS env var. When unset, allow common local dev URLs
+    (needed for credentialed requests: wildcard origin is invalid with credentials).
+    """
+    raw = os.environ.get("CORS_ORIGINS", "").strip()
+    if raw:
+        return [o.strip() for o in raw.split(",") if o.strip()]
+    return [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:4200",
+        "http://127.0.0.1:4200",
+    ]
 
 
 class Config:
@@ -32,6 +63,8 @@ class Config:
         "SUPABASE_STORAGE_PUBLIC_BASE_URL",
         f"{SUPABASE_URL}/storage/v1/object/public" if SUPABASE_URL else "",
     )
+
+    CORS_ORIGINS = _parse_cors_origins()
 
     # File Uploads
     UPLOAD_FOLDER = os.path.join(os.getcwd(), "app", "uploads")

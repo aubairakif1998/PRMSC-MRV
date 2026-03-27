@@ -2,13 +2,10 @@ import os
 
 from flask import Flask, send_from_directory
 from flask_cors import CORS
-from dotenv import load_dotenv
 
 from .config import config_by_name
 from .db.supabase_client import mask_database_uri
 from .extensions import db, jwt, migrate
-
-load_dotenv()
 
 
 def _register_extensions(app: Flask) -> None:
@@ -63,11 +60,12 @@ def create_app():
     _register_extensions(app)
     _register_blueprints(app)
 
+    # Explicit origins (not "*"): browsers disallow credentials + wildcard ACAO.
     CORS(
         app,
         resources={
             r"/api/*": {
-                "origins": "*",
+                "origins": app.config["CORS_ORIGINS"],
                 "allow_headers": [
                     "Content-Type",
                     "Authorization",
