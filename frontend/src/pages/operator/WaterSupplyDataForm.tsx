@@ -19,14 +19,12 @@ import {
   Save,
   Send,
   Info,
-  MapPin,
   Calendar,
   ChevronDown,
   ChevronUp,
   Camera,
   ArrowLeft,
   CheckCircle2,
-  AlertCircle,
 } from "lucide-react";
 
 type ToastType = "success" | "error";
@@ -45,9 +43,7 @@ type WaterLocation = {
   tehsil: string;
   village: string;
   settlement: string;
-  hasWaterMeter: boolean;
-  pumpFlowRate: number | null;
-  pumpHours: string;
+  /** Monthly total from the physical water meter (m³). */
   totalWater: string;
 };
 
@@ -95,7 +91,6 @@ const currentYear = currentDate.getFullYear();
 
 const WaterSupplyDataForm = () => {
   const {
-    getWaterSystemConfig,
     getWaterSupplyData,
     saveWaterSupplyData,
     getWaterDraft,
@@ -113,9 +108,6 @@ const WaterSupplyDataForm = () => {
       tehsil: "",
       village: "",
       settlement: "",
-      hasWaterMeter: true,
-      pumpFlowRate: null,
-      pumpHours: "",
       totalWater: "",
     },
   ]);
@@ -185,17 +177,6 @@ const WaterSupplyDataForm = () => {
         type: "error",
       });
       return false;
-    }
-
-    if (!currentLocation.hasWaterMeter) {
-      const pumpHours = parseFloat(currentLocation.pumpHours);
-      if (!currentLocation.pumpHours || Number.isNaN(pumpHours)) {
-        setToast({
-          message: "Pump Operating Hours is required and must be numeric.",
-          type: "error",
-        });
-        return false;
-      }
     }
 
     if (status === "submitted" && !attachment) {
@@ -268,9 +249,6 @@ const WaterSupplyDataForm = () => {
             tehsil: draftData.tehsil || "",
             village: draftData.village || "",
             settlement: draftData.settlement || "",
-            hasWaterMeter: true,
-            pumpFlowRate: null,
-            pumpHours: draftData.pump_operating_hours || "",
             totalWater: draftData.total_water_pumping || "",
           },
         ]);
@@ -300,9 +278,6 @@ const WaterSupplyDataForm = () => {
             tehsil: system.tehsil || "",
             village: system.village || "",
             settlement: system.settlement || "",
-            hasWaterMeter: true,
-            pumpFlowRate: null,
-            pumpHours: "",
             totalWater: "",
           },
         ]);
@@ -355,8 +330,6 @@ const WaterSupplyDataForm = () => {
         tehsil: value,
         village: "",
         settlement: "",
-        pumpFlowRate: null,
-        pumpHours: "",
         totalWater: "",
       };
     } else if (field === "village") {
@@ -364,15 +337,12 @@ const WaterSupplyDataForm = () => {
         ...newLocations[idx]!,
         village: value,
         settlement: "",
-        pumpFlowRate: null,
-        pumpHours: "",
         totalWater: "",
       };
     } else if (field === "settlement") {
       newLocations[idx] = {
         ...newLocations[idx]!,
         settlement: value,
-        pumpHours: "",
         totalWater: "",
       };
     } else {
@@ -390,15 +360,6 @@ const WaterSupplyDataForm = () => {
 
     if (newTehsil && newVillage) {
       try {
-        const config = await getWaterSystemConfig(
-          newTehsil,
-          newVillage,
-          newSettlement || "",
-        );
-        if (config.exists && config.config) {
-          newLocations[idx]!.pumpFlowRate =
-            config.config.pump_flow_rate || null;
-        }
         const data = (await getWaterSupplyData({
           tehsil: newTehsil,
           village: newVillage,
@@ -419,7 +380,6 @@ const WaterSupplyDataForm = () => {
             (d: WaterSupplyRecord) => d.month === month,
           );
           if (monthData) {
-            newLocations[idx]!.pumpHours = monthData.pump_operating_hours || "";
             newLocations[idx]!.totalWater = monthData.total_water_pumped || "";
           }
         }
@@ -433,29 +393,6 @@ const WaterSupplyDataForm = () => {
           type: "error",
         });
       }
-    }
-  };
-
-  const handlePumpHoursChange = (id: number, value: string) => {
-    const numericValue = sanitizeDecimalInput(value);
-    const loc = locations.find((l) => l.id === id);
-    if (loc && !loc.hasWaterMeter && loc.pumpFlowRate && numericValue) {
-      const calculated = (
-        parseFloat(numericValue) * loc.pumpFlowRate
-      ).toFixed(2);
-      setLocations(
-        locations.map((l) =>
-          l.id === id
-            ? { ...l, pumpHours: numericValue, totalWater: calculated }
-            : l,
-        ),
-      );
-    } else {
-      setLocations(
-        locations.map((l) =>
-          l.id === id ? { ...l, pumpHours: numericValue } : l,
-        ),
-      );
     }
   };
 
@@ -515,8 +452,7 @@ const WaterSupplyDataForm = () => {
           monthlyData: [
             {
               month: month,
-              pump_operating_hours:
-                loc.pumpHours.trim() === "" ? null : loc.pumpHours,
+              pump_operating_hours: null,
               total_water_pumped:
                 loc.totalWater.trim() === "" ? null : loc.totalWater,
             },
@@ -954,91 +890,41 @@ const WaterSupplyDataForm = () => {
                           border: "1px solid #e2e8f0",
                         }}
                       >
-                        <div
+                        <p
                           style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "12px",
-                            marginBottom: "24px",
+                            margin: "0 0 16px 0",
+                            fontSize: "14px",
+                            lineHeight: 1.6,
+                            color: "#64748b",
                           }}
                         >
+                          Enter the monthly total from your <strong style={{ color: "#334155" }}>water meter</strong> reading (m³).
+                        </p>
+                        <div style={inputGroupStyle}>
+                          <label style={labelStyle}>
+                            Total Water Pumped (m³)
+                          </label>
                           <input
-                            type="checkbox"
-                            checked={loc.hasWaterMeter}
-                            onChange={() =>
+                            type="number"
+                            style={{
+                              ...inputStyle,
+                              fontWeight: "800",
+                              color: "#0ea5e9",
+                            }}
+                            value={loc.totalWater}
+                            onChange={(e) =>
                               updateLocationValue(
                                 loc.id,
-                                "hasWaterMeter",
-                                !loc.hasWaterMeter,
+                                "totalWater",
+                                sanitizeDecimalInput(e.target.value),
                               )
                             }
-                            style={{
-                              width: "20px",
-                              height: "20px",
-                              accentColor: "#0ea5e9",
-                            }}
+                            inputMode="decimal"
+                            min="0"
+                            step="any"
+                            pattern="[0-9]*\.?[0-9]+"
+                            placeholder="0.0"
                           />
-                          <span style={{ fontWeight: "700", color: "#334155" }}>
-                            Water Meter Active / Installed
-                          </span>
-                        </div>
-
-                        <div
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns: "1fr 1fr",
-                            gap: "32px",
-                          }}
-                        >
-                          <div style={inputGroupStyle}>
-                            <label style={labelStyle}>
-                              Pump Operating Hours
-                            </label>
-                            <input
-                              type="number"
-                              style={inputStyle}
-                              value={loc.pumpHours}
-                              onChange={(e) =>
-                                handlePumpHoursChange(loc.id, e.target.value)
-                              }
-                              disabled={loc.hasWaterMeter}
-                              inputMode="decimal"
-                              min="0"
-                              step="any"
-                              pattern="[0-9]*\.?[0-9]+"
-                              placeholder={
-                                loc.hasWaterMeter
-                                  ? "Disabled (Meter Active)"
-                                  : "0.0"
-                              }
-                            />
-                          </div>
-                          <div style={inputGroupStyle}>
-                            <label style={labelStyle}>
-                              Total Water Pumped (m³)
-                            </label>
-                            <input
-                              type="number"
-                              style={{
-                                ...inputStyle,
-                                fontWeight: "800",
-                                color: "#0ea5e9",
-                              }}
-                              value={loc.totalWater}
-                              onChange={(e) =>
-                                updateLocationValue(
-                                  loc.id,
-                                  "totalWater",
-                                  sanitizeDecimalInput(e.target.value),
-                                )
-                              }
-                              inputMode="decimal"
-                              min="0"
-                              step="any"
-                              pattern="[0-9]*\.?[0-9]+"
-                              placeholder="0.0"
-                            />
-                          </div>
                         </div>
                       </div>
                     </div>
