@@ -1,0 +1,85 @@
+/**
+ * Shared shapes aligned with `backend/docs/API_REFERENCE.md`.
+ * IDs are UUID strings from the API.
+ */
+
+export type WaterSystemRow = {
+  id: string;
+  tehsil: string;
+  village: string;
+  settlement?: string | null;
+  unique_identifier?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  pump_model?: string | null;
+  pump_serial_number?: string | null;
+  start_of_operation?: string | null;
+  depth_of_water_intake?: number | null;
+  height_to_ohr?: number | null;
+  pump_flow_rate?: number | null;
+  meter_model?: string | null;
+  meter_serial_number?: string | null;
+  meter_accuracy_class?: string | null;
+  calibration_requirement?: string | null;
+  installation_date?: string | null;
+  created_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type SolarSystemRow = {
+  id: string;
+  tehsil: string;
+  village: string;
+  settlement?: string | null;
+  unique_identifier?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  installation_location?: string | null;
+  solar_panel_capacity?: number | null;
+  inverter_capacity?: number | null;
+  inverter_serial_number?: string | null;
+  installation_date?: string | null;
+  meter_model?: string | null;
+  meter_serial_number?: string | null;
+  green_meter_connection_date?: string | null;
+  remarks?: string | null;
+  created_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  monthly_log_count?: number | null;
+};
+
+export type ApiValidationErrorBody = {
+  message?: string;
+  errors?: string[];
+};
+
+/** One row from `GET /operator/solar-supply-data` (list for a site + year). */
+export type SolarMonthlySupplyListItem = {
+  id: string;
+  year: number;
+  month: number;
+  energy_consumed_from_grid?: number | null;
+  energy_exported_to_grid?: number | null;
+  remarks?: string | null;
+  electricity_bill_image_url?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+/** List table row: API row plus site context (attached client-side). */
+export type SolarMonthlyLogTableRow = SolarMonthlySupplyListItem & {
+  solar_system_id: string;
+  tehsil: string;
+  village: string;
+  settlement: string;
+};
+
+/** `GET /operator/solar-supply-data/record/:id` full shape. */
+export type SolarMonthlySupplyRecordDetail = SolarMonthlySupplyListItem & {
+  solar_system_id: string;
+  tehsil: string;
+  village: string;
+  settlement?: string | null;
+};

@@ -20,22 +20,17 @@ def _register_blueprints(app: Flask) -> None:
     from .routes.main import main_bp
     from .routes.users import users_bp
 
-    from .routes.analyst import analyst_bp
     from .routes.dashboard import dashboard_bp
-    from .routes.emissions import emissions_bp
-    from .routes.operator import operator_bp
-    from .routes.predictions import predictions_bp
-    from .routes.verification import verification_bp
-
+    from .routes.tehsil_manager import tehsil_manager_bp
+    from .routes.tubewell_operator import tubewell_operator_bp
+    # Operator: both blueprints share /api/operator (route paths must stay unique).
+    # Verification queue + in-app notifications: /api/operator/verification/* and /api/operator/notifications*
     blueprints = [
         (main_bp, ""),
         (auth_bp, "/api/auth"),
         (users_bp, "/api/users"),
-        (operator_bp, "/api/operator"),
-        (analyst_bp, "/api/analyst"),
-        (emissions_bp, "/api/emissions"),
-        (verification_bp, "/api/verification"),
-        (predictions_bp, "/api/predictions"),
+        (tehsil_manager_bp, "/api/operator"),
+        (tubewell_operator_bp, "/api/operator"),
         (dashboard_bp, "/api/dashboard"),
     ]
 

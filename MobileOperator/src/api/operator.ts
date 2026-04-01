@@ -141,13 +141,15 @@ export async function submitSolarMonthlyData(formData: AnyRecord) {
 
 export async function getMySubmissions(status?: string) {
   const params = status ? `?status=${encodeURIComponent(status)}` : '';
-  const res = await apiClient.get(`/verification/my-submissions${params}`);
+  const res = await apiClient.get(`/operator/my-submissions${params}`);
   return res.data as { submissions?: Array<Record<string, unknown>> };
 }
 
-/** Full submission + record_data + audit_trail (operator must own the submission). */
+/** Full submission + record_data + audit_trail (tubewell operator’s own submission). */
 export async function getSubmissionDetail(submissionId: string) {
-  const res = await apiClient.get(`/verification/${encodeURIComponent(submissionId)}`);
+  const res = await apiClient.get(
+    `/operator/tubewell/submission/${encodeURIComponent(submissionId)}`,
+  );
   return res.data as {
     submission?: Record<string, unknown>;
     record_data?: Record<string, unknown>;

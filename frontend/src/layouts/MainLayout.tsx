@@ -2,15 +2,17 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Calculator,
-  CheckCircle,
+  BarChart3,
+  ClipboardList,
   Database,
   Droplets,
   FileCheck,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
   Sun,
+  UserPlus,
   User as UserIcon,
   X,
 } from "lucide-react";
@@ -20,12 +22,21 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
+import { HQ_DASHBOARD, tehsilRoutes } from "../constants/routes";
+import { accountRoutes } from "../constants/routes";
+import {
+  canOnboardOperators,
+  isExecutiveRole,
+  isTehsilManager,
+  roleDisplayLabel,
+} from "../constants/roles";
 import { useAuth } from "../contexts/AuthContext";
 
 type MenuItem = {
   path: string;
   icon: ReactNode;
   label: string;
+  end?: boolean;
 };
 
 const MainLayout = () => {
@@ -38,82 +49,81 @@ const MainLayout = () => {
     navigate("/login");
   };
 
-  const isOperator = user?.role === "operator";
-  const isAnalyst = user
-    ? (
-        [
-          "analyst",
-          "environment_manager",
-          "operations_department",
-        ] as ReadonlyArray<string>
-      ).includes(user.role)
-    : false;
+  const exec = user ? isExecutiveRole(user.role) : false;
+  const tehsilMgr = user ? isTehsilManager(user.role) : false;
+  const showOnboard = user ? canOnboardOperators(user.role) : false;
 
-  const menuItems: MenuItem[] = useMemo(
-    () => [
-      ...(isAnalyst
-        ? [
-            {
-              path: "/analyst",
-              icon: <LayoutDashboard className="size-4" />,
-              label: "Dashboard",
-            },
-            {
-              path: "/submissions",
-              icon: <FileCheck className="size-4" />,
-              label: "Submissions",
-            },
-            {
-              path: "/verifications",
-              icon: <CheckCircle className="size-4" />,
-              label: "Verifications",
-            },
-            {
-              path: "/analyst/emissions",
-              icon: <Calculator className="size-4" />,
-              label: "Emission Dashboard",
-            },
-            {
-              path: "/analyst/prediction",
-              icon: <Database className="size-4" />,
-              label: "Prediction",
-            },
-          ]
-        : []),
-      ...(isOperator
-        ? [
-            {
-              path: "/operator",
-              icon: <Database className="size-4" />,
-              label: "Dashboard",
-            },
-            {
-              path: "/operator/water-drafts",
-              icon: <Droplets className="size-4" />,
-              label: "Water Drafts",
-            },
-            {
-              path: "/operator/water-submissions",
-              icon: <FileCheck className="size-4" />,
-              label: "Water Submissions",
-            },
-            {
-              path: "/operator/solar-drafts",
-              icon: <Sun className="size-4" />,
-              label: "Solar Drafts",
-            },
-            {
-              path: "/operator/solar-submissions",
-              icon: <FileCheck className="size-4" />,
-              label: "Solar Submissions",
-            },
-          ]
-        : []),
-    ],
-    [isAnalyst, isOperator],
-  );
+  const menuItems: MenuItem[] = useMemo(() => {
+    const items: MenuItem[] = [];
 
-  const roleLabel = (user?.role ?? "user").replaceAll("_", " ");
+    if (exec) {
+      items.push(
+        {
+          path: HQ_DASHBOARD,
+          icon: <BarChart3 className="size-4" />,
+          label: "Organization KPI",
+          end: true,
+        },
+        {
+          path: "/submissions",
+          icon: <FileCheck className="size-4" />,
+          label: "Submissions",
+        },
+      );
+    }
+
+    if (tehsilMgr) {
+      items.push(
+        {
+          path: tehsilRoutes.dashboard,
+          icon: <LayoutDashboard className="size-4" />,
+          label: "Dashboard",
+          end: true,
+        },
+        ...(showOnboard
+          ? [
+              {
+                path: tehsilRoutes.onboardOperator,
+                icon: <UserPlus className="size-4" />,
+                label: "Onboard Operator",
+              } satisfies MenuItem,
+            ]
+          : []),
+        {
+          path: tehsilRoutes.waterSystems,
+          icon: <Droplets className="size-4" />,
+          label: "Water Systems",
+        },
+        {
+          path: tehsilRoutes.solarSites,
+          icon: <Sun className="size-4" />,
+          label: "Solar Systems",
+        },
+        {
+          path: tehsilRoutes.solarMonthlyLogging,
+          icon: <ClipboardList className="size-4" />,
+          label: "Solar Monthly Logging",
+        },
+
+        {
+          path: tehsilRoutes.waterSubmissions,
+          icon: <FileCheck className="size-4" />,
+          label: "Submissions",
+        },
+      );
+    }
+
+    // Account utilities for all portal roles
+    items.push({
+      path: accountRoutes.changePassword,
+      icon: <KeyRound className="size-4" />,
+      label: "Change Password",
+    });
+
+    return items;
+  }, [exec, tehsilMgr, showOnboard]);
+
+  const roleLabel = roleDisplayLabel(user?.role);
   const userInitials = (user?.name ?? "User")
     .split(" ")
     .filter(Boolean)
@@ -148,9 +158,9 @@ const MainLayout = () => {
             <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
               {menuItems.map((item) => (
                 <NavLink
-                  key={item.path}
+                  key={`${item.path}-${item.label}`}
                   to={item.path}
-                  end={item.path === "/analyst" || item.path === "/operator"}
+                  end={item.end ?? false}
                   className={({ isActive }) =>
                     `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
                       isActive
@@ -217,7 +227,8 @@ const MainLayout = () => {
                   />
                   <Badge
                     variant="outline"
-                    className="uppercase tracking-wide text-[10px] text-primary"
+                    className="max-w-[140px] truncate text-[10px] uppercase tracking-wide text-primary"
+                    title={roleLabel}
                   >
                     {roleLabel}
                   </Badge>

@@ -1,4 +1,7 @@
 from datetime import datetime
+
+from sqlalchemy import Time
+
 from app.extensions import db
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -7,13 +10,87 @@ from werkzeug.security import generate_password_hash, check_password_hash
 def get_uuid():
     return str(uuid.uuid4())
 
-# Submission Status Constants
-SUBMISSION_STATUS_DRAFT = 'draft'
-SUBMISSION_STATUS_SUBMITTED = 'submitted'
-SUBMISSION_STATUS_UNDER_REVIEW = 'under_review'
-SUBMISSION_STATUS_VERIFIED = 'verified'
-SUBMISSION_STATUS_REJECTED = 'rejected'
-SUBMISSION_STATUS_APPROVED = 'approved'
+# Water log + submission workflow (tubewell operator ↔ tehsil manager)
+SUBMISSION_STATUS_DRAFTED = "drafted"
+SUBMISSION_STATUS_SUBMITTED = "submitted"
+SUBMISSION_STATUS_ACCEPTED = "accepted"
+SUBMISSION_STATUS_REJECTED = "rejected"
+SUBMISSION_STATUS_REVERTED_BACK = "reverted_back"
+
+# Rows a tubewell operator may edit or delete (water_energy_logging_daily)
+WATER_LOG_OPERATOR_EDITABLE = frozenset(
+    (SUBMISSION_STATUS_DRAFTED, SUBMISSION_STATUS_REVERTED_BACK)
+)
+
+
+def normalize_water_submission_status(value: str | None) -> str:
+    """Map API/legacy values to canonical status strings."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return SUBMISSION_STATUS_DRAFTED
+    v = str(value).strip().lower()
+    if v == "draft":
+        return SUBMISSION_STATUS_DRAFTED
+    legacy = {
+        "under_review": SUBMISSION_STATUS_SUBMITTED,
+        "verified": SUBMISSION_STATUS_ACCEPTED,
+        "approved": SUBMISSION_STATUS_ACCEPTED,
+    }
+    if v in legacy:
+        return legacy[v]
+    canon = {
+        "drafted": SUBMISSION_STATUS_DRAFTED,
+        "submitted": SUBMISSION_STATUS_SUBMITTED,
+        "accepted": SUBMISSION_STATUS_ACCEPTED,
+        "rejected": SUBMISSION_STATUS_REJECTED,
+        "reverted_back": SUBMISSION_STATUS_REVERTED_BACK,
+    }
+    return canon.get(v, str(value).strip())
+
+class Role(db.Model):
+    """
+    Canonical RBAC role: code matches JWT claim and API checks.
+    hierarchy_rank: higher value = more privilege (4 = SYSTEM_ADMIN).
+    permissions: JSON list of strings (see ``app.constants.permissions``).
+    """
+
+    __tablename__ = "roles"
+
+    id = db.Column(db.String(36), primary_key=True, default=get_uuid)
+    code = db.Column(db.String(50), unique=True, nullable=False)
+    display_name = db.Column(db.String(120), nullable=False)
+    hierarchy_rank = db.Column(db.Integer, nullable=False)
+    permissions = db.Column(db.JSON, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UserTehsil(db.Model):
+    """Many-to-many: tehsil manager (ADMIN) ↔ predefined tehsil. Tubewell operators use UserWaterSystem only."""
+
+    __tablename__ = "user_tehsils"
+
+    user_id = db.Column(
+        db.String(36), db.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    tehsil = db.Column(db.String(100), primary_key=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UserWaterSystem(db.Model):
+    """Tubewell operator ↔ water systems they may log data for (subset of tehsil)."""
+
+    __tablename__ = "user_water_systems"
+
+    user_id = db.Column(
+        db.String(36), db.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    water_system_id = db.Column(
+        db.String(36), db.ForeignKey("water_systems.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -22,14 +99,62 @@ class User(db.Model):
     email = db.Column(db.String(150), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     phone = db.Column(db.String(20))
-    role = db.Column(db.String(50), nullable=False, default='operator') # 'operator', 'analyst', etc.
+    role_id = db.Column(db.String(36), db.ForeignKey('roles.id'), nullable=False)
+    assigned_role = db.relationship(
+        'Role', backref=db.backref('users', lazy='dynamic'), lazy='joined'
+    )
+    tehsil_links = db.relationship(
+        'UserTehsil',
+        backref='user',
+        cascade='all, delete-orphan',
+        lazy='selectin',
+    )
+    water_system_links = db.relationship(
+        "UserWaterSystem",
+        backref="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @property
+    def role(self):
+        return self.assigned_role.code if self.assigned_role else None
+
+    @property
+    def assigned_tehsils(self) -> list[str]:
+        """Tehsil managers: persisted links. Tubewell operators: tehsils implied by assigned water systems."""
+        if self.role == "USER":
+            from app.services.tehsil_access import operator_tehsils_derived_from_water_systems
+
+            return sorted(operator_tehsils_derived_from_water_systems(self))
+        return [link.tehsil for link in self.tehsil_links]
+
+    @property
+    def assigned_water_system_ids(self) -> list[str]:
+        return [str(link.water_system_id) for link in self.water_system_links]
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+
+class PasswordResetToken(db.Model):
+    """One-time token for /auth/forgot-password → /auth/reset-password."""
+
+    __tablename__ = "password_reset_tokens"
+
+    id = db.Column(db.String(36), primary_key=True, default=get_uuid)
+    user_id = db.Column(db.String(36), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token_hash = db.Column(db.String(64), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 class WaterSystem(db.Model):
     __tablename__ = 'water_systems'
@@ -38,6 +163,8 @@ class WaterSystem(db.Model):
     village = db.Column(db.String(100), nullable=False)
     settlement = db.Column(db.String(150))
     unique_identifier = db.Column(db.String(100), unique=True, nullable=False)
+    latitude = db.Column(db.Float)
+    longitude = db.Column(db.Float)
     pump_model = db.Column(db.String(100))
     pump_serial_number = db.Column(db.String(100))
     start_of_operation = db.Column(db.Date)
@@ -51,21 +178,40 @@ class WaterSystem(db.Model):
     installation_date = db.Column(db.Date)
     created_by = db.Column(db.String(36), db.ForeignKey('users.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationship to monthly data
-    records = db.relationship('MonthlyWaterData', backref='system', lazy=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-class MonthlyWaterData(db.Model):
-    __tablename__ = 'monthly_water_data'
+    records = db.relationship(
+        "WaterEnergyLoggingDaily", backref="system", lazy=True
+    )
+
+
+class WaterEnergyLoggingDaily(db.Model):
+    """Tubewell operator daily water / pump logs (one row per system per calendar day)."""
+
+    __tablename__ = "water_energy_logging_daily"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "water_system_id",
+            "log_date",
+            name="uq_water_energy_logging_daily_sid_date",
+        ),
+    )
+
     id = db.Column(db.String(36), primary_key=True, default=get_uuid)
-    water_system_id = db.Column(db.String(36), db.ForeignKey('water_systems.id'), nullable=False)
-    year = db.Column(db.Integer, nullable=False)
-    month = db.Column(db.Integer, nullable=False)
+    water_system_id = db.Column(
+        db.String(36), db.ForeignKey("water_systems.id"), nullable=False
+    )
+    log_date = db.Column(db.Date, nullable=False)
+    pump_start_time = db.Column(Time, nullable=True)
+    pump_end_time = db.Column(Time, nullable=True)
     pump_operating_hours = db.Column(db.Float)
     total_water_pumped = db.Column(db.Float)
     bulk_meter_image_url = db.Column(db.Text)
-    status = db.Column(db.String(20), default='draft') # 'draft' or 'submitted'
+    status = db.Column(db.String(24), default=SUBMISSION_STATUS_DRAFTED)
+    remarks = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 class SolarSystem(db.Model):
     __tablename__ = 'solar_systems'
@@ -74,6 +220,8 @@ class SolarSystem(db.Model):
     village = db.Column(db.String(100), nullable=False)
     settlement = db.Column(db.String(150))
     unique_identifier = db.Column(db.String(100), unique=True, nullable=False)
+    latitude = db.Column(db.Float)
+    longitude = db.Column(db.Float)
     installation_location = db.Column(db.String(100))
     solar_panel_capacity = db.Column(db.Float)
     inverter_capacity = db.Column(db.Float)
@@ -82,58 +230,33 @@ class SolarSystem(db.Model):
     meter_model = db.Column(db.String(100))
     meter_serial_number = db.Column(db.String(100))
     green_meter_connection_date = db.Column(db.Date)
-    calibration_date = db.Column(db.Date)
     remarks = db.Column(db.Text)
     created_by = db.Column(db.String(36), db.ForeignKey('users.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationship to monthly data
-    records = db.relationship('MonthlyEnergyData', backref='system', lazy=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-class MonthlyEnergyData(db.Model):
-    __tablename__ = 'monthly_energy_data'
+    records = db.relationship(
+        "SolarEnergyLoggingMonthly", backref="system", lazy=True
+    )
+
+
+class SolarEnergyLoggingMonthly(db.Model):
+    """Tehsil manager monthly solar grid / export logs."""
+
+    __tablename__ = "solar_energy_logging_monthly"
+
     id = db.Column(db.String(36), primary_key=True, default=get_uuid)
-    solar_system_id = db.Column(db.String(36), db.ForeignKey('solar_systems.id'), nullable=False)
+    solar_system_id = db.Column(
+        db.String(36), db.ForeignKey("solar_systems.id"), nullable=False
+    )
     year = db.Column(db.Integer, nullable=False)
     month = db.Column(db.Integer, nullable=False)
     energy_consumed_from_grid = db.Column(db.Float)
     energy_exported_to_grid = db.Column(db.Float)
     electricity_bill_image_url = db.Column(db.Text)
-    status = db.Column(db.String(20), default='draft') # 'draft' or 'submitted'
+    remarks = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-class ImageVerification(db.Model):
-    __tablename__ = 'image_verifications'
-    id = db.Column(db.String(36), primary_key=True, default=get_uuid)
-    linked_record_id = db.Column(db.String(36), nullable=False)
-    record_type = db.Column(db.String(20), nullable=False) # 'water' or 'solar'
-    image_url = db.Column(db.Text, nullable=False)
-    verification_status = db.Column(db.String(20))
-    verified_by = db.Column(db.String(36), db.ForeignKey('users.id'))
-    verified_at = db.Column(db.DateTime, default=datetime.utcnow)
-    comment = db.Column(db.Text)
-
-class EmissionResult(db.Model):
-    __tablename__ = 'emission_results'
-    id = db.Column(db.String(36), primary_key=True, default=get_uuid)
-    system_type = db.Column(db.String(20), nullable=False)
-    system_id = db.Column(db.String(36), nullable=False)
-    year = db.Column(db.Integer, nullable=False)
-    baseline_emission = db.Column(db.Float)
-    project_emission = db.Column(db.Float)
-    emission_reduction = db.Column(db.Float)
-    calculated_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-class PredictionResult(db.Model):
-    __tablename__ = 'prediction_results'
-    id = db.Column(db.String(36), primary_key=True, default=get_uuid)
-    prediction_type = db.Column(db.String(100))
-    system_id = db.Column(db.String(36), nullable=False)
-    year = db.Column(db.Integer, nullable=False)
-    predicted_value = db.Column(db.Float)
-    model_used = db.Column(db.String(100))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 # ============================================================
 # VERIFICATION WORKFLOW MODELS
@@ -141,15 +264,10 @@ class PredictionResult(db.Model):
 
 class Submission(db.Model):
     """
-    Represents a data submission that goes through the verification workflow.
-    
-    Status Flow:
-    - draft: Operator is still editing
-    - submitted: Operator submitted for verification
-    - under_review: Analyst is reviewing
-    - verified: Analyst verified the data
-    - rejected: Rejected (can be edited and resubmitted)
-    - approved: Environment Manager approved (ready for emission calculations)
+    Water verification workflow (links to water_energy_logging_daily rows).
+
+    Status: drafted → submitted → accepted | rejected | reverted_back
+    (reverted_back returns the row to the tubewell operator for edits.)
     """
     __tablename__ = 'submissions'
     
@@ -162,19 +280,15 @@ class Submission(db.Model):
     # Type of submission: water_system or solar_system
     submission_type = db.Column(db.String(50), nullable=False)  # 'water_system' or 'solar_system'
     
-    # The actual record ID being submitted (monthly_water_data or monthly_energy_data)
+    # Record ID in water_energy_logging_daily or solar_energy_logging_monthly
     record_id = db.Column(db.String(36), nullable=False)
     
-    # Current status in the verification workflow
-    status = db.Column(db.String(30), default='draft', nullable=False)
-    # Values: draft, submitted, under_review, verified, rejected, approved
-    
-    # Timestamps for tracking
+    status = db.Column(db.String(30), default=SUBMISSION_STATUS_DRAFTED, nullable=False)
+
     submitted_at = db.Column(db.DateTime)
     reviewed_at = db.Column(db.DateTime)
     approved_at = db.Column(db.DateTime)
-    
-    # Users who reviewed/approved
+
     reviewed_by = db.Column(db.String(36), db.ForeignKey('users.id'))
     approved_by = db.Column(db.String(36), db.ForeignKey('users.id'))
     reviewer = db.relationship('User', foreign_keys=[reviewed_by], backref='reviews')
@@ -213,11 +327,10 @@ class VerificationLog(db.Model):
     # Role at time of action
     role = db.Column(db.String(50), nullable=False)
     
-    # Optional comment
     comment = db.Column(db.Text)
-    
-    # Timestamp
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class Notification(db.Model):
@@ -246,5 +359,6 @@ class Notification(db.Model):
     
     # Read status
     is_read = db.Column(db.Boolean, default=False)
-    
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -22,10 +22,10 @@ src/
 ├── contexts/      # React contexts (Auth)
 ├── layouts/       # Page layouts
 ├── pages/        # Page components
-│   ├── analyst/      # Analyst dashboard
-│   ├── auth/        # Login/Register
-│   ├── operator/     # Operator forms
-│   └── verification/ # Verification workflow
+│   ├── auth/          # Login
+│   ├── executive/     # Org KPI (Program dashboard) + MRV COO / Manager Ops shell
+│   ├── tehsil/        # Tehsil manager portal (onboard, water/solar registration, solar monthly)
+│   └── verification/  # Submissions & verification workflow
 ├── services/     # API service layer
 └── utils/        # Utility functions
 ```

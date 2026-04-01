@@ -1,7 +1,12 @@
 from flask import Blueprint, request, jsonify
 from app.extensions import db
-from app.models.models import WaterSystem, MonthlyWaterData, SolarSystem, MonthlyEnergyData
-from sqlalchemy import func
+from app.models.models import (
+    WaterSystem,
+    WaterEnergyLoggingDaily,
+    SolarSystem,
+    SolarEnergyLoggingMonthly,
+)
+from sqlalchemy import extract, func
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
@@ -44,29 +49,35 @@ def get_water_supplied():
     month = request.args.get('month', type=int)
     year = request.args.get('year', type=int)
     
-    query = db.session.query(
-        MonthlyWaterData.month,
-        func.sum(MonthlyWaterData.total_water_pumped).label('total')
-    ).join(WaterSystem, MonthlyWaterData.water_system_id == WaterSystem.id)\
-     .filter(WaterSystem.meter_serial_number != None, WaterSystem.meter_serial_number != '')
-     
-    if tehsil and tehsil != 'All Tehsils':
+    w_m = extract("month", WaterEnergyLoggingDaily.log_date)
+    w_y = extract("year", WaterEnergyLoggingDaily.log_date)
+    query = (
+        db.session.query(
+            w_m.label("month"),
+            func.sum(WaterEnergyLoggingDaily.total_water_pumped).label("total"),
+        )
+        .join(WaterSystem, WaterEnergyLoggingDaily.water_system_id == WaterSystem.id)
+        .filter(
+            WaterSystem.meter_serial_number != None,
+            WaterSystem.meter_serial_number != "",
+        )
+    )
+
+    if tehsil and tehsil != "All Tehsils":
         query = query.filter(WaterSystem.tehsil == tehsil)
-    if village and village != 'All Villages':
+    if village and village != "All Villages":
         query = query.filter(WaterSystem.village == village)
     if month:
-        query = query.filter(MonthlyWaterData.month == month)
+        query = query.filter(w_m == month)
     if year:
-        query = query.filter(MonthlyWaterData.year == year)
-        
-    query = query.group_by(MonthlyWaterData.month).order_by(MonthlyWaterData.month)
+        query = query.filter(w_y == year)
+
+    query = query.group_by(w_m).order_by(w_m)
     results = query.all()
-    
-    # If a specific month is selected, we might want to return just that or a series?
-    # Keeping series for now as charts expect it, but filter will narrow it down
-    data_dict = {r.month: float(r.total or 0) for r in results}
+
+    data_dict = {int(r.month): float(r.total or 0) for r in results}
     data = [{"month": m, "total_water_pumped": data_dict.get(m, 0)} for m in range(1, 13)]
-    
+
     return jsonify(data), 200
 
 @dashboard_bp.route('/pump-hours', methods=['GET'])
@@ -76,25 +87,33 @@ def get_pump_hours():
     month = request.args.get('month', type=int)
     year = request.args.get('year', type=int)
     
-    query = db.session.query(
-        MonthlyWaterData.month,
-        func.sum(MonthlyWaterData.pump_operating_hours).label('total')
-    ).join(WaterSystem, MonthlyWaterData.water_system_id == WaterSystem.id)\
-     .filter((WaterSystem.meter_serial_number == None) | (WaterSystem.meter_serial_number == ''))
-     
-    if tehsil and tehsil != 'All Tehsils':
+    w_m = extract("month", WaterEnergyLoggingDaily.log_date)
+    w_y = extract("year", WaterEnergyLoggingDaily.log_date)
+    query = (
+        db.session.query(
+            w_m.label("month"),
+            func.sum(WaterEnergyLoggingDaily.pump_operating_hours).label("total"),
+        )
+        .join(WaterSystem, WaterEnergyLoggingDaily.water_system_id == WaterSystem.id)
+        .filter(
+            (WaterSystem.meter_serial_number == None)
+            | (WaterSystem.meter_serial_number == "")
+        )
+    )
+
+    if tehsil and tehsil != "All Tehsils":
         query = query.filter(WaterSystem.tehsil == tehsil)
-    if village and village != 'All Villages':
+    if village and village != "All Villages":
         query = query.filter(WaterSystem.village == village)
     if month:
-        query = query.filter(MonthlyWaterData.month == month)
+        query = query.filter(w_m == month)
     if year:
-        query = query.filter(MonthlyWaterData.year == year)
-        
-    query = query.group_by(MonthlyWaterData.month).order_by(MonthlyWaterData.month)
+        query = query.filter(w_y == year)
+
+    query = query.group_by(w_m).order_by(w_m)
     results = query.all()
-    
-    data_dict = {r.month: float(r.total or 0) for r in results}
+
+    data_dict = {int(r.month): float(r.total or 0) for r in results}
     data = [{"month": m, "pump_operating_hours": data_dict.get(m, 0)} for m in range(1, 13)]
     
     return jsonify(data), 200
@@ -107,20 +126,22 @@ def get_solar_generation():
     year = request.args.get('year', type=int)
     
     query = db.session.query(
-        MonthlyEnergyData.month,
-        func.sum(MonthlyEnergyData.energy_exported_to_grid).label('total')  # Treated as Generation
-    ).join(SolarSystem, MonthlyEnergyData.solar_system_id == SolarSystem.id)
-     
-    if tehsil and tehsil != 'All Tehsils':
+        SolarEnergyLoggingMonthly.month,
+        func.sum(SolarEnergyLoggingMonthly.energy_exported_to_grid).label("total"),
+    ).join(SolarSystem, SolarEnergyLoggingMonthly.solar_system_id == SolarSystem.id)
+
+    if tehsil and tehsil != "All Tehsils":
         query = query.filter(SolarSystem.tehsil == tehsil)
-    if village and village != 'All Villages':
+    if village and village != "All Villages":
         query = query.filter(SolarSystem.village == village)
     if month:
-        query = query.filter(MonthlyEnergyData.month == month)
+        query = query.filter(SolarEnergyLoggingMonthly.month == month)
     if year:
-        query = query.filter(MonthlyEnergyData.year == year)
-        
-    query = query.group_by(MonthlyEnergyData.month).order_by(MonthlyEnergyData.month)
+        query = query.filter(SolarEnergyLoggingMonthly.year == year)
+
+    query = query.group_by(SolarEnergyLoggingMonthly.month).order_by(
+        SolarEnergyLoggingMonthly.month
+    )
     results = query.all()
     
     data_dict = {r.month: float(r.total or 0) for r in results}
@@ -136,20 +157,22 @@ def get_grid_import():
     year = request.args.get('year', type=int)
     
     query = db.session.query(
-        MonthlyEnergyData.month,
-        func.sum(MonthlyEnergyData.energy_consumed_from_grid).label('total')
-    ).join(SolarSystem, MonthlyEnergyData.solar_system_id == SolarSystem.id)
-     
-    if tehsil and tehsil != 'All Tehsils':
+        SolarEnergyLoggingMonthly.month,
+        func.sum(SolarEnergyLoggingMonthly.energy_consumed_from_grid).label("total"),
+    ).join(SolarSystem, SolarEnergyLoggingMonthly.solar_system_id == SolarSystem.id)
+
+    if tehsil and tehsil != "All Tehsils":
         query = query.filter(SolarSystem.tehsil == tehsil)
-    if village and village != 'All Villages':
+    if village and village != "All Villages":
         query = query.filter(SolarSystem.village == village)
     if month:
-        query = query.filter(MonthlyEnergyData.month == month)
+        query = query.filter(SolarEnergyLoggingMonthly.month == month)
     if year:
-        query = query.filter(MonthlyEnergyData.year == year)
-        
-    query = query.group_by(MonthlyEnergyData.month).order_by(MonthlyEnergyData.month)
+        query = query.filter(SolarEnergyLoggingMonthly.year == year)
+
+    query = query.group_by(SolarEnergyLoggingMonthly.month).order_by(
+        SolarEnergyLoggingMonthly.month
+    )
     results = query.all()
     
     data_dict = {r.month: float(r.total or 0) for r in results}

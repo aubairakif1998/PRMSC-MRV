@@ -11,6 +11,7 @@ import {
   Sun,
   XCircle,
 } from "lucide-react";
+import { canApproveSubmissions, isStaffRole } from "../../constants/roles";
 import { useAuth } from "../../contexts/AuthContext";
 import { useVerificationApi } from "../../hooks";
 import { getApiErrorMessage } from "../../lib/api-error";
@@ -135,7 +136,8 @@ const VerificationDashboard = () => {
   const [rejectRemarks, setRejectRemarks] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const canReview = user?.role === "analyst";
+  const canVerifyReject = isStaffRole(user?.role);
+  const canApprove = canApproveSubmissions(user?.role);
 
   const loadData = async (soft = false) => {
     try {
@@ -414,7 +416,7 @@ const VerificationDashboard = () => {
                                   <Eye className="size-4" />
                                   Review
                                 </Button>
-                                {canReview &&
+                                {canVerifyReject &&
                                 (sub.status === "submitted" ||
                                   sub.status === "under_review") ? (
                                   <>
@@ -436,6 +438,12 @@ const VerificationDashboard = () => {
                                       Reject
                                     </Button>
                                   </>
+                                ) : null}
+                                {canApprove && sub.status === "verified" ? (
+                                  <Button size="sm" variant="secondary" disabled>
+                                    <ShieldCheck className="size-4" />
+                                    Approve (not available)
+                                  </Button>
                                 ) : null}
                               </div>
                             </TableCell>
@@ -502,7 +510,7 @@ const VerificationDashboard = () => {
                             <Eye className="size-4" />
                             Review
                           </Button>
-                          {canReview &&
+                          {canVerifyReject &&
                           (sub.status === "submitted" ||
                             sub.status === "under_review") ? (
                             <>
@@ -524,6 +532,12 @@ const VerificationDashboard = () => {
                                 Reject
                               </Button>
                             </>
+                          ) : null}
+                          {canApprove && sub.status === "verified" ? (
+                            <Button size="sm" variant="secondary" disabled>
+                              <ShieldCheck className="size-4" />
+                              Approve (not available)
+                            </Button>
                           ) : null}
                         </div>
                       </div>

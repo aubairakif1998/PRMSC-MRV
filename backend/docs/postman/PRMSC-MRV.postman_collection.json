@@ -1,0 +1,1387 @@
+{
+  "info": {
+    "_postman_id": "c8cc9e62-7102-444d-9b94-03e48c3f8582",
+    "name": "PRMSC MRV API",
+    "description": "PRMSC MRV backend — routes as implemented in `app/routes/`. Prefix `/api/operator` is shared by tubewell + tehsil-manager blueprints. Authenticate with Login; collection uses Bearer {{token}}.\n\nSee `backend/docs/API_REFERENCE.md` for roles and behavior.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:5000"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  var j = pm.response.json();",
+                  "  if (j.token) pm.environment.set('token', j.token);",
+                  "  if (j.user && j.user.id) pm.environment.set('user_id', j.user.id);",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "change-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"old\",\n  \"new_password\": \"new\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Forgot password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Reset password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "reset-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"reset-token-here\",\n  \"new_password\": \"new-secret\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Onboard tubewell operator",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/onboard-operator",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "onboard-operator"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Operator\",\n  \"email\": \"op@example.com\",\n  \"password\": \"Temp123!\",\n  \"water_system_ids\": [\"{{water_system_id}}\"]\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Program summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/program-summary?tehsil=All Tehsils&village=All Villages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard",
+                "program-summary"
+              ],
+              "query": [
+                {
+                  "key": "tehsil",
+                  "value": "All Tehsils"
+                },
+                {
+                  "key": "village",
+                  "value": "All Villages"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Water supplied (monthly)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/water-supplied?tehsil=All Tehsils&year=2025",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard",
+                "water-supplied"
+              ],
+              "query": [
+                {
+                  "key": "tehsil",
+                  "value": "All Tehsils"
+                },
+                {
+                  "key": "year",
+                  "value": "2025"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Pump hours (monthly)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/pump-hours?tehsil=All Tehsils&year=2025",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard",
+                "pump-hours"
+              ],
+              "query": [
+                {
+                  "key": "tehsil",
+                  "value": "All Tehsils"
+                },
+                {
+                  "key": "year",
+                  "value": "2025"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Solar generation (monthly)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/solar-generation?tehsil=All Tehsils&year=2025",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard",
+                "solar-generation"
+              ],
+              "query": [
+                {
+                  "key": "tehsil",
+                  "value": "All Tehsils"
+                },
+                {
+                  "key": "year",
+                  "value": "2025"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Grid import (monthly)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/grid-import?tehsil=All Tehsils&year=2025",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard",
+                "grid-import"
+              ],
+              "query": [
+                {
+                  "key": "tehsil",
+                  "value": "All Tehsils"
+                },
+                {
+                  "key": "year",
+                  "value": "2025"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health & debug",
+      "item": [
+        {
+          "name": "Health root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            }
+          }
+        },
+        {
+          "name": "Hello",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/hello",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "hello"
+              ]
+            }
+          }
+        },
+        {
+          "name": "CORS test",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/debug/cors-test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "debug",
+                "cors-test"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Operator — shared (notifications)",
+      "item": [
+        {
+          "name": "Notifications list",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "notifications"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mark notification read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/notifications/{{notification_id}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "notifications",
+                "{{notification_id}}",
+                "read"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Mark all notifications read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/notifications/read-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "notifications",
+                "read-all"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Operator — tubewell (USER)",
+      "item": [
+        {
+          "name": "Submit record for verification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "submit"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"record_id\": \"{{water_record_id}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "My submissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/my-submissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "my-submissions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Tubewell submission detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/tubewell/submission/{{submission_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "tubewell",
+                "submission",
+                "{{submission_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload meter image",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "record_id",
+                  "value": "{{water_record_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "record_type",
+                  "value": "water",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "upload"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List water systems",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/water-systems",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "water-systems"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Water system config (lookup)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/water-system-config?tehsil=TAUNSA&village=V1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "water-system-config"
+              ],
+              "query": [
+                {
+                  "key": "tehsil",
+                  "value": "TAUNSA"
+                },
+                {
+                  "key": "village",
+                  "value": "V1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List water drafts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/water-data/drafts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "water-data",
+                "drafts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get water draft",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/water-data/draft/{{water_record_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "water-data",
+                "draft",
+                "{{water_record_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update water draft",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/water-data/draft/{{water_record_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "water-data",
+                "draft",
+                "{{water_record_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"year\": 2025,\n  \"month\": 3,\n  \"pump_operating_hours\": 8,\n  \"total_water_pumped\": 100\n}"
+            }
+          }
+        },
+        {
+          "name": "Submit draft (POST submit)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/water-data/draft/{{water_record_id}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "water-data",
+                "draft",
+                "{{water_record_id}}",
+                "submit"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Delete water draft",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/water-data/draft/{{water_record_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "water-data",
+                "draft",
+                "{{water_record_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Water supply data (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/water-supply-data?tehsil=TAUNSA&village=V1&year=2025",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "water-supply-data"
+              ],
+              "query": [
+                {
+                  "key": "tehsil",
+                  "value": "TAUNSA"
+                },
+                {
+                  "key": "village",
+                  "value": "V1"
+                },
+                {
+                  "key": "year",
+                  "value": "2025"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Water supply data (bulk save)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/water-supply-data",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "water-supply-data"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"year\": 2025,\n  \"status\": \"drafted\",\n  \"data\": []\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Operator — tehsil manager (ADMIN)",
+      "item": [
+        {
+          "name": "Tehsil manager submission detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/tehsil-manager/submission/{{submission_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "tehsil-manager",
+                "submission",
+                "{{submission_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upsert water system",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/water-system",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "water-system"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tehsil\": \"TAUNSA\",\n  \"village\": \"V1\",\n  \"settlement\": \"\",\n  \"pump_model\": \"X\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update water system",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/water-system/{{water_system_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "water-system",
+                "{{water_system_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pump_model\": \"Y\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete water system",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/water-system/{{water_system_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "water-system",
+                "{{water_system_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upsert solar system",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/solar-system",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "solar-system"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tehsil\": \"TAUNSA\",\n  \"village\": \"V1\",\n  \"settlement\": \"\",\n  \"solar_panel_capacity\": 50\n}"
+            }
+          }
+        },
+        {
+          "name": "Post solar monthly row",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/solar-data",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "solar-data"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"solar_system_id\": \"{{solar_system_id}}\",\n  \"year\": 2025,\n  \"month\": 1,\n  \"energy_consumed_from_grid\": 0,\n  \"energy_exported_to_grid\": 0\n}"
+            }
+          }
+        },
+        {
+          "name": "List solar systems",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/solar-systems",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "solar-systems"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get solar system",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/solar-system/{{solar_system_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "solar-system",
+                "{{solar_system_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update solar system",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/solar-system/{{solar_system_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "solar-system",
+                "{{solar_system_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remarks\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete solar system",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/solar-system/{{solar_system_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "solar-system",
+                "{{solar_system_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Solar system config (lookup)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/solar-system-config?tehsil=TAUNSA&village=V1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "solar-system-config"
+              ],
+              "query": [
+                {
+                  "key": "tehsil",
+                  "value": "TAUNSA"
+                },
+                {
+                  "key": "village",
+                  "value": "V1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Solar supply data (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/solar-supply-data?tehsil=TAUNSA&village=V1&year=2025",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "solar-supply-data"
+              ],
+              "query": [
+                {
+                  "key": "tehsil",
+                  "value": "TAUNSA"
+                },
+                {
+                  "key": "village",
+                  "value": "V1"
+                },
+                {
+                  "key": "year",
+                  "value": "2025"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Solar supply data (bulk save)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/solar-supply-data",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "solar-supply-data"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"year\": 2025,\n  \"data\": []\n}"
+            }
+          }
+        },
+        {
+          "name": "Solar monthly record (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/solar-supply-data/record/{{solar_record_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "solar-supply-data",
+                "record",
+                "{{solar_record_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Solar monthly record (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/solar-supply-data/record/{{solar_record_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "solar-supply-data",
+                "record",
+                "{{solar_record_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"energy_consumed_from_grid\": 10\n}"
+            }
+          }
+        },
+        {
+          "name": "Solar monthly record (DELETE)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/solar-supply-data/record/{{solar_record_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "solar-supply-data",
+                "record",
+                "{{solar_record_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verification pending queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/verification/pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "verification",
+                "pending"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Accept submission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/verification/{{submission_id}}/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "verification",
+                "{{submission_id}}",
+                "verify"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remarks\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Reject submission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/verification/{{submission_id}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "verification",
+                "{{submission_id}}",
+                "reject"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remarks\": \"Reason\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Revert submission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/verification/{{submission_id}}/revert",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "verification",
+                "{{submission_id}}",
+                "revert"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remarks\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Verification audit logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/verification/audit-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "verification",
+                "audit-logs"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verification stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operator/verification/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "operator",
+                "verification",
+                "stats"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

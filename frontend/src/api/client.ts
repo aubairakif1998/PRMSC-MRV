@@ -1,7 +1,7 @@
 import axios, { type AxiosInstance } from "axios";
 
 export const apiClient: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "https://prmsc-mrv.vercel.app/api",
+  baseURL: import.meta.env.VITE_API_URL || "http://127.0.0.1:5000/api",
   headers: {
     "Content-Type": "application/json",
   },
@@ -23,9 +23,7 @@ apiClient.interceptors.response.use(
   (error) => {
     const status = error.response?.status;
     const requestUrl = String(error.config?.url || "");
-    const isAuthRequest =
-      requestUrl.includes("/auth/login") ||
-      requestUrl.includes("/auth/register");
+    const isAuthRequest = requestUrl.includes("/auth/login");
 
     if (status === 401 && !isAuthRequest) {
       localStorage.removeItem("mrv_token");

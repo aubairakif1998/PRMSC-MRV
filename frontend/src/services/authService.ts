@@ -1,13 +1,6 @@
 import api from '../api/api'
-import type { AnyRecord } from './types'
 
 export type LoginInput = { email: string; password: string }
-export type RegisterInput = { name: string; email: string; password: string; role: string }
-
-export const registerUser = async ({ name, email, password, role }: RegisterInput) => {
-  const response = await api.post('/auth/register', { name, email, password, role })
-  return response.data as AnyRecord
-}
 
 export const loginUser = async ({ email, password }: LoginInput) => {
   const response = await api.post('/auth/login', { email, password })
@@ -15,5 +8,20 @@ export const loginUser = async ({ email, password }: LoginInput) => {
   localStorage.setItem('mrv_token', data.token)
   localStorage.setItem('mrv_user', JSON.stringify(data.user))
   return data
+}
+
+export async function forgotPassword(email: string): Promise<{ message: string; reset_token?: string }> {
+  const res = await api.post("/auth/forgot-password", { email });
+  return res.data as { message: string; reset_token?: string };
+}
+
+export async function resetPassword(token: string, new_password: string): Promise<{ message: string }> {
+  const res = await api.post("/auth/reset-password", { token, new_password });
+  return res.data as { message: string };
+}
+
+export async function changePassword(current_password: string, new_password: string): Promise<{ message: string }> {
+  const res = await api.post("/auth/change-password", { current_password, new_password });
+  return res.data as { message: string };
 }
 

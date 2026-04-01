@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Loader2, Lock, Mail } from "lucide-react";
 import { toast } from "sonner";
 
@@ -9,33 +9,22 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Separator } from "../../components/ui/separator";
+import { Link } from "react-router-dom";
+import { defaultPathForRole } from "../../constants/roles";
 import { useAuth } from "../../contexts/AuthContext";
+import { getApiErrorMessage } from "../../lib/api-error";
 
 type LoginLocationState = { message?: string };
 
-const readApiErrorMessage = (error: unknown) => {
-  if (typeof error !== "object" || error === null) return null;
-  const maybeResponse = (error as Record<string, unknown>).response;
-  if (typeof maybeResponse !== "object" || maybeResponse === null) return null;
-  const maybeData = (maybeResponse as Record<string, unknown>).data;
-  if (typeof maybeData !== "object" || maybeData === null) return null;
-  const maybeMessage = (maybeData as Record<string, unknown>).message;
-  return typeof maybeMessage === "string" ? maybeMessage : null;
-};
-
-const getErrorMessage = (error: unknown, fallback = "Login failed") => {
-  const apiMessage = readApiErrorMessage(error);
-  if (apiMessage) return apiMessage;
-  if (error instanceof Error && error.message) return error.message;
-  return fallback;
-};
+const getErrorMessage = (error: unknown, fallback = "Login failed") =>
+  getApiErrorMessage(error, fallback);
 
 const getRedirectPathFromStorage = () => {
   const savedUserRaw = localStorage.getItem("mrv_user");
   if (!savedUserRaw) return "/submissions";
   try {
     const savedUser = JSON.parse(savedUserRaw) as { role?: string };
-    return savedUser?.role === "operator" ? "/operator" : "/submissions";
+    return defaultPathForRole(savedUser?.role);
   } catch {
     return "/submissions";
   }
@@ -131,7 +120,7 @@ const Login = () => {
                 Welcome back
               </h1>
               <p className="text-sm text-muted-foreground">
-                Sign in to your account to continue
+                Tehsil Manager Operators, Manager Operations, and MRV COO only.
               </p>
             </div>
 
@@ -168,6 +157,14 @@ const Login = () => {
                     className="h-10 pl-9"
                   />
                 </div>
+                <div className="flex justify-end">
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
               </div>
 
               {errorMessage ? (
@@ -191,13 +188,9 @@ const Login = () => {
             <Separator />
 
             <p className="text-center text-sm text-muted-foreground">
-              Don&apos;t have an account?{" "}
-              <Link
-                to="/register"
-                className="font-medium text-primary hover:underline"
-              >
-                Create one
-              </Link>
+              Tubewell operators are onboarded under{" "}
+              <span className="font-medium text-foreground">Tehsil dashboard</span>{" "}
+              → Onboard operator. Use credentials issued to your role.
             </p>
           </CardContent>
         </div>

@@ -67,3 +67,24 @@ class StorageService:
             "public_url": StorageService._public_url(app_config, object_key),
         }
 
+    @staticmethod
+    def try_delete_public_object(app_config: dict, public_url: str | None) -> None:
+        """Best-effort delete of a stored object given its public URL (same bucket as uploads)."""
+        if not public_url or not isinstance(public_url, str):
+            return
+        public_base = (app_config.get("SUPABASE_STORAGE_PUBLIC_BASE_URL") or "").rstrip("/")
+        bucket = app_config.get("SUPABASE_STORAGE_BUCKET")
+        if not public_base or not bucket:
+            return
+        prefix = f"{public_base}/{bucket}/"
+        if not public_url.startswith(prefix):
+            return
+        object_key = public_url[len(prefix) :].lstrip("/")
+        if not object_key:
+            return
+        try:
+            client = StorageService._build_client(app_config)
+            client.delete_object(Bucket=bucket, Key=object_key)
+        except Exception:
+            pass
+

@@ -15,6 +15,10 @@ import {
   User,
   XCircle,
 } from "lucide-react";
+import {
+  canApproveSubmissions,
+  isTubewellOperator,
+} from "../../constants/roles";
 import { useAuth } from "../../contexts/AuthContext";
 import { useVerificationApi } from "../../hooks";
 import { getApiErrorMessage } from "../../lib/api-error";
@@ -45,6 +49,7 @@ import {
   TabsTrigger,
 } from "../../components/ui/tabs";
 import { toast } from "sonner";
+import { getApiOrigin } from "../../utils/apiOrigin";
 
 const STATUS_CONFIG = {
   draft: {
@@ -104,13 +109,14 @@ type SubmissionSystem = {
   meter_accuracy_class?: string;
   calibration_requirement?: string;
   green_meter_connection_date?: string;
-  calibration_date?: string;
 };
 
 type SubmissionRecordData = {
   system?: SubmissionSystem;
   month?: number | string;
   year?: number | string;
+  pump_start_time?: string | null;
+  pump_end_time?: string | null;
   pump_operating_hours?: number | string;
   total_water_pumped?: number | string;
   energy_consumed_from_grid?: number | string;
@@ -151,8 +157,8 @@ const getImageUrl = (path?: string) => {
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
   const parts = path.split(/[\\/]/);
   const filename = parts[parts.length - 1];
-  const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
-  return `${baseUrl}/api/uploads/${filename}`;
+  const origin = getApiOrigin();
+  return `${origin}/api/uploads/${encodeURIComponent(filename)}`;
 };
 
 const actionColor = (action: string) => {
@@ -205,8 +211,11 @@ const EvidenceCard = ({ title, url }: { title: string; url: string }) => (
 );
 
 const SubmissionReview = () => {
-  const { getSubmissionDetail, verifySubmission, rejectSubmission } =
-    useVerificationApi();
+  const {
+    getSubmissionDetail,
+    verifySubmission,
+    rejectSubmission,
+  } = useVerificationApi();
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -230,7 +239,7 @@ const SubmissionReview = () => {
           navigate(-1);
           return;
         }
-        const data = await getSubmissionDetail(id);
+        const data = await getSubmissionDetail(id, user?.role);
         setSubmission(
           (data as { submission?: SubmissionDetail }).submission || null,
         );
@@ -250,13 +259,15 @@ const SubmissionReview = () => {
       }
     };
     void run();
-  }, [id, navigate]);
+  }, [id, navigate, user?.role]);
 
-  const isOperator = user?.role === "operator";
+  const isOperator = isTubewellOperator(user?.role);
   const canAct =
     !isOperator &&
     (submission?.status === "submitted" ||
       submission?.status === "under_review");
+  const canFinalApprove =
+    canApproveSubmissions(user?.role) && submission?.status === "verified";
   const isWaterSystem = submission?.submission_type === "water_system";
 
   const statusBadge = useMemo(() => {
@@ -470,6 +481,14 @@ const SubmissionReview = () => {
                 {isWaterSystem ? (
                   <>
                     <MetaItem
+                      label="Pump start"
+                      value={infoValue(recordData?.pump_start_time)}
+                    />
+                    <MetaItem
+                      label="Pump end"
+                      value={infoValue(recordData?.pump_end_time)}
+                    />
+                    <MetaItem
                       label="Operating Hours"
                       value={infoValue(
                         recordData?.pump_operating_hours,
@@ -572,10 +591,6 @@ const SubmissionReview = () => {
                       value={infoValue(
                         recordData?.system?.green_meter_connection_date,
                       )}
-                    />
-                    <MetaItem
-                      label="Calibration Date"
-                      value={infoValue(recordData?.system?.calibration_date)}
                     />
                   </>
                 )}
@@ -680,6 +695,32 @@ const SubmissionReview = () => {
                   >
                     <XCircle className="size-4" />
                     Reject Submission
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {canFinalApprove ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Final approval</CardTitle>
+                  <CardDescription>
+                    Manager operation or MRV COO — approve for emission use
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Textarea
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    placeholder="Optional approval remarks..."
+                    rows={3}
+                  />
+                  <Button
+                    className="w-full"
+                    disabled
+                  >
+                    <ShieldCheck className="size-4" />
+                    Approve for MRV (not available)
                   </Button>
                 </CardContent>
               </Card>

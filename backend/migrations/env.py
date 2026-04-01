@@ -1,5 +1,13 @@
 from __future__ import with_statement
 
+import os
+import sys
+
+# Alembic CLI cwd is usually ``backend/``; ensure package root is importable.
+_backend_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _backend_root not in sys.path:
+    sys.path.insert(0, _backend_root)
+
 from logging.config import fileConfig
 
 from alembic import context
@@ -25,16 +33,12 @@ def get_engine_url():
         return str(get_engine().url).replace("%", "%%")
 
 
-config.set_main_option("sqlalchemy.url", get_engine_url())
-target_db = current_app.extensions["migrate"].db
-
-
 def get_metadata():
-    return target_db.metadata
+    return current_app.extensions["migrate"].db.metadata
 
 
 def run_migrations_offline():
-    url = config.get_main_option("sqlalchemy.url")
+    url = get_engine_url()
     context.configure(
         url=url,
         target_metadata=get_metadata(),
@@ -60,8 +64,16 @@ def run_migrations_online():
             context.run_migrations()
 
 
-if context.is_offline_mode():
-    run_migrations_offline()
-else:
-    run_migrations_online()
+def run_migrations():
+    """Bootstrap Flask app so ``current_app`` works for Alembic and ``flask db``."""
+    from app import create_app
 
+    app = create_app()
+    with app.app_context():
+        if context.is_offline_mode():
+            run_migrations_offline()
+        else:
+            run_migrations_online()
+
+
+run_migrations()

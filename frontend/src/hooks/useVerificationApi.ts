@@ -1,6 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
 import {
-  approveSubmission as approveSubmissionService,
   getAuditLogs as getAuditLogsService,
   getNotifications as getNotificationsService,
   getPendingSubmissions as getPendingSubmissionsService,
@@ -22,10 +21,13 @@ export function useVerificationApi() {
     mutationFn: () => getVerificationStatsService(),
   })
   const getSubmissionDetailMutation = useMutation({
-    mutationFn: (id: string | number | undefined) => getSubmissionDetailService(id),
+    mutationFn: (args: {
+      id: string | number | undefined
+      userRole?: string | null
+    }) => getSubmissionDetailService(args.id, args.userRole),
   })
   const submitRecordForVerificationMutation = useMutation({
-    mutationFn: (payload: { submission_type: 'water_system' | 'solar_system'; record_id: string }) =>
+    mutationFn: (payload: { record_id: string }) =>
       submitRecordForVerificationService(payload),
   })
   const verifySubmissionMutation = useMutation({
@@ -35,10 +37,6 @@ export function useVerificationApi() {
   const rejectSubmissionMutation = useMutation({
     mutationFn: ({ id, remarks }: { id: string | number | undefined; remarks: string }) =>
       rejectSubmissionService(id, remarks),
-  })
-  const approveSubmissionMutation = useMutation({
-    mutationFn: ({ id, remarks }: { id: string | number | undefined; remarks: string }) =>
-      approveSubmissionService(id, remarks),
   })
   const getNotificationsMutation = useMutation({
     mutationFn: () => getNotificationsService(),
@@ -56,14 +54,15 @@ export function useVerificationApi() {
   return {
     getPendingSubmissions: getPendingSubmissionsMutation.mutateAsync,
     getVerificationStats: getVerificationStatsMutation.mutateAsync,
-    getSubmissionDetail: getSubmissionDetailMutation.mutateAsync,
+    getSubmissionDetail: (
+      id: string | number | undefined,
+      userRole?: string | null,
+    ) => getSubmissionDetailMutation.mutateAsync({ id, userRole }),
     submitRecordForVerification: submitRecordForVerificationMutation.mutateAsync,
     verifySubmission: (id: string | number | undefined, remarks: string) =>
       verifySubmissionMutation.mutateAsync({ id, remarks }),
     rejectSubmission: (id: string | number | undefined, remarks: string) =>
       rejectSubmissionMutation.mutateAsync({ id, remarks }),
-    approveSubmission: (id: string | number | undefined, remarks: string) =>
-      approveSubmissionMutation.mutateAsync({ id, remarks }),
     getNotifications: getNotificationsMutation.mutateAsync,
     markNotificationRead: markNotificationReadMutation.mutateAsync,
     markAllNotificationsRead: markAllNotificationsReadMutation.mutateAsync,

@@ -1,3 +1,18 @@
+function extractFromData(maybeData: Record<string, unknown>): string | null {
+  const message = maybeData.message;
+  if (typeof message === "string" && message.trim()) return message;
+
+  const apiError = maybeData.error;
+  if (typeof apiError === "string" && apiError.trim()) return apiError;
+
+  const errors = maybeData.errors;
+  if (Array.isArray(errors) && errors.length > 0) {
+    const lines = errors.filter((e) => typeof e === "string") as string[];
+    if (lines.length) return lines.slice(0, 8).join("\n");
+  }
+  return null;
+}
+
 export function getApiErrorMessage(
   error: unknown,
   fallback = "Something went wrong",
@@ -7,11 +22,11 @@ export function getApiErrorMessage(
     if (typeof maybeResponse === "object" && maybeResponse !== null) {
       const maybeData = (maybeResponse as Record<string, unknown>).data;
       if (typeof maybeData === "object" && maybeData !== null) {
-        const message = (maybeData as Record<string, unknown>).message;
-        if (typeof message === "string" && message.trim()) return message;
-
-        const apiError = (maybeData as Record<string, unknown>).error;
-        if (typeof apiError === "string" && apiError.trim()) return apiError;
+        const fromObj = extractFromData(maybeData as Record<string, unknown>);
+        if (fromObj) return fromObj;
+      }
+      if (typeof maybeData === "string" && maybeData.trim()) {
+        return maybeData;
       }
     }
   }

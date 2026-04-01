@@ -69,12 +69,37 @@ class Config:
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max upload size
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "pdf"}
 
+    # Password reset (optional SMTP; link base for emails)
+    PASSWORD_MIN_LENGTH = int(os.environ.get("PASSWORD_MIN_LENGTH", "8"))
+    PASSWORD_RESET_TOKEN_TTL_HOURS = int(
+        os.environ.get("PASSWORD_RESET_TOKEN_TTL_HOURS", "1")
+    )
+    PASSWORD_RESET_FRONTEND_URL = os.environ.get(
+        "PASSWORD_RESET_FRONTEND_URL", ""
+    ).rstrip("/")
+    MAIL_SERVER = os.environ.get("MAIL_SERVER", "").strip()
+    MAIL_PORT = int(os.environ.get("MAIL_PORT", "587"))
+    MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "true").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    MAIL_USERNAME = os.environ.get("MAIL_USERNAME", "")
+    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
+    MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER", "")
+
+
 class DevelopmentConfig(Config):
     DEBUG = True
+    # When true and DEBUG, POST /auth/forgot-password may include reset_token in JSON (local only).
+    PASSWORD_RESET_DEV_RETURN_TOKEN = os.environ.get(
+        "PASSWORD_RESET_DEV_RETURN_TOKEN", ""
+    ).lower() in ("1", "true", "yes")
 
 
 class ProductionConfig(Config):
     DEBUG = False
+    PASSWORD_RESET_DEV_RETURN_TOKEN = False
 
 
 config_by_name = {
