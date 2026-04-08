@@ -13,7 +13,7 @@ const ENV = String(import.meta.env.VITE_ENV || "")
   .toUpperCase();
 
 const DEFAULT_API_ORIGIN =
-  ENV === "PROD" ? "https://prmsc-mrv.vercel.app" : "http://127.0.0.1:5001";
+  ENV === "PROD" ? "https://prmsc-mrv.onrender.com" : "http://127.0.0.1:5001";
 
 const API_URL =
   normalizeApiUrl(import.meta.env.VITE_API_URL) ||
