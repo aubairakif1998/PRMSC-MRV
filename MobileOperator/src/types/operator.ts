@@ -1,23 +1,21 @@
-export type LogType = 'water' | 'solar'
+export type LogType = 'water'
 
 export type WaterLogInput = {
   year: number
   month: number
+  /** Calendar day (1–31). Maps to API `monthlyData[].day` → server `log_date`. */
+  day: number
   tehsil: string
   village: string
   settlement?: string
-  /** Monthly total from the physical water meter (m³). */
+  /** Reading total from the water meter (m³). Maps to API `total_water_pumped`. */
   totalWaterPumping?: number | null
-}
-
-export type SolarLogInput = {
-  year: number
-  month: number
-  tehsil: string
-  village: string
-  settlement?: string
-  energyConsumedFromGrid?: number | null
-  energyExportedToGrid?: number | null
+  /**
+   * Maps to API `monthlyData[].pump_start_time` / `pump_end_time`.
+   * Server derives `pump_operating_hours` from the interval.
+   */
+  pumpStartTime?: string | null
+  pumpEndTime?: string | null
 }
 
 export type EvidenceAsset = {
@@ -39,16 +37,9 @@ export type QueueItem =
       type: 'water'
       payload: WaterLogInput
       evidence?: EvidenceAsset | null
+      /** When re-submitting an edit without a new photo, reuse server meter image URL. */
+      existingImageUrl?: string
       createdAt: string
       queueKey?: string
     } & QueueMeta
-  | ({
-      id: string
-      type: 'solar'
-      payload: SolarLogInput
-      evidence?: EvidenceAsset | null
-      createdAt: string
-      queueKey?: string
-    }
-    & QueueMeta)
 

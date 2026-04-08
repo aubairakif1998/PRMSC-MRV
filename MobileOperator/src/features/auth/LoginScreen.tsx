@@ -13,23 +13,23 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AlertCircle, Eye, EyeOff, Lock, Mail } from 'lucide-react-native';
 
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../../auth/AuthContext';
 import {
   Alert as AlertBanner,
   AlertDescription,
   AlertTitle,
-} from '../components/ui/alert';
-import { Button } from '../components/ui/button';
+} from '../../components/ui/alert';
+import { Button } from '../../components/ui/button';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Separator } from '../components/ui/separator';
-import { Text } from '../components/ui/text';
+} from '../../components/ui/card';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
+import { Separator } from '../../components/ui/separator';
+import { Text } from '../../components/ui/text';
 
 // const TAGS = ['Water systems', 'Solar energy', 'MRV verification'] as const;
 
@@ -99,7 +99,7 @@ export function LoginScreen() {
             <View className="border-primary/15 bg-primary/5 mb-6 rounded-2xl border px-5 py-6 shadow-sm shadow-black/5">
               <View className="mb-4 items-center">
                 <Image
-                  source={require('../assets/prmsc-logo.png')}
+                  source={require('../../assets/prmsc-logo.png')}
                   className="h-28 w-56"
                   resizeMode="contain"
                 />

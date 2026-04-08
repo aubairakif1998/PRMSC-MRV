@@ -15,22 +15,25 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker'
 
 import { LOCATION_DATA, SETTLEMENT_DATA, TEHSIL_OPTIONS } from '../utils/locationData'
-import type { EvidenceAsset, LogType, QueueItem, SolarLogInput, WaterLogInput } from '../types/operator'
+import type { EvidenceAsset, LogType, QueueItem, WaterLogInput } from '../types/operator'
 import type { RootStackParamList } from '../navigation/types'
 import { createIdempotencyKey, enqueue, isOnline } from '../offline/queue'
 import { getQueue } from '../offline/queue'
 import { deleteDraft, getDraftById, saveDraft, updateDraft } from '../offline/drafts'
-import {
-  getSolarSystems,
-  getWaterSystems,
-  saveSolarSupplyData,
-  saveWaterSupplyData,
-  uploadEvidenceFile,
-} from '../api/operator'
+import { getWaterSupplyData, getWaterSystems, saveWaterSupplyData, uploadEvidenceFile } from '../api/operator'
 import { getApiErrorMessage } from '../lib/api-error'
 import { SearchablePickerModal } from './SearchablePickerModal'
-import { MonthlyLogFormLoading } from '../screens/screenSkeletons'
-import { isYearMonthNotAfterNow } from '../utils/formValidation'
+import { DatePickerField } from './DatePickerField'
+import {
+  AmPmTimePickerField,
+  normalizeTo24hWithSeconds,
+} from './AmPmTimePickerField'
+import { MonthlyLogFormLoading } from '../features/shared/screenSkeletons'
+import {
+  getLocalIsoDateString,
+  isIsoDatePastOrToday,
+  isValidIsoDate,
+} from '../utils/formValidation'
 
 type Props = {
   type: LogType
@@ -45,23 +48,18 @@ type PickerState = {
   options: string[]
 }
 
-const MONTHS = [
-  { label: 'January', value: 1 },
-  { label: 'February', value: 2 },
-  { label: 'March', value: 3 },
-  { label: 'April', value: 4 },
-  { label: 'May', value: 5 },
-  { label: 'June', value: 6 },
-  { label: 'July', value: 7 },
-  { label: 'August', value: 8 },
-  { label: 'September', value: 9 },
-  { label: 'October', value: 10 },
-  { label: 'November', value: 11 },
-  { label: 'December', value: 12 },
-]
+function parseIsoToYmd(iso: string): { y: number; m: number; d: number } | null {
+  const t = iso.trim()
+  if (!isValidIsoDate(t)) return null
+  return {
+    y: parseInt(t.slice(0, 4), 10),
+    m: parseInt(t.slice(5, 7), 10),
+    d: parseInt(t.slice(8, 10), 10),
+  }
+}
 
-function sanitizeIntegerInput(value: string): string {
-  return value.replace(/\D/g, '')
+function isoFromYmd(y: number, m: number, d: number): string {
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
 
 function sanitizeDecimalInput(value: string): string {
@@ -81,33 +79,73 @@ function SelectField({
   label,
   value,
   onPress,
+  disabled,
 }: {
   label: string
   value?: string
   onPress: () => void
+  disabled?: boolean
 }) {
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      <Pressable style={styles.select} onPress={onPress}>
-        <Text style={styles.selectText}>{value || `Select ${label}`}</Text>
+      <Pressable
+        style={[styles.select, disabled && styles.selectDisabled]}
+        onPress={disabled ? undefined : onPress}
+        disabled={disabled}
+      >
+        <Text style={[styles.selectText, disabled && styles.selectTextDisabled]}>
+          {value || `Select ${label}`}
+        </Text>
       </Pressable>
     </View>
   )
 }
 
+function RequiredLabel({ children }: { children: string }) {
+  return (
+    <Text style={styles.label}>
+      {children}
+      <Text style={styles.requiredMark}> *</Text>
+    </Text>
+  )
+}
+
+function formatTimeForInput(raw: unknown): string {
+  if (raw == null || raw === '') return ''
+  const s = String(raw).trim()
+  if (!s) return ''
+  // "06:00:00" or full ISO — keep HH:MM for editing
+  const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/)
+  if (m) {
+    const hh = m[1].padStart(2, '0')
+    return `${hh}:${m[2]}`
+  }
+  return s
+}
+
+function isValidTimeOfDayInput(s: string): boolean {
+  const t = s.trim()
+  if (!t) return false
+  return /^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(t)
+}
+
 export function LogEntryForm({ type, draftId, systemId }: Props) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const currentYear = new Date().getFullYear()
-  const [year, setYear] = useState(String(currentYear))
-  const [month, setMonth] = useState(new Date().getMonth() + 1)
+  /** Full calendar date for `log_date` (defaults to today). */
+  const [logDateIso, setLogDateIso] = useState(() => getLocalIsoDateString())
   const [tehsil, setTehsil] = useState('')
   const [village, setVillage] = useState('')
   const [settlement, setSettlement] = useState('')
 
   const [totalWater, setTotalWater] = useState('')
-  const [energyConsumed, setEnergyConsumed] = useState('')
-  const [energyExported, setEnergyExported] = useState('')
+  const [pumpStartTime, setPumpStartTime] = useState('')
+  const [pumpEndTime, setPumpEndTime] = useState('')
+  const [existingRecordId, setExistingRecordId] = useState<string | null>(null)
+  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null)
+
+  const periodLocked = Boolean(existingRecordId)
 
   const [picker, setPicker] = useState<PickerState | null>(null)
   const [asset, setAsset] = useState<EvidenceAsset | null>(null)
@@ -129,37 +167,33 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     return SETTLEMENT_DATA[village] ?? []
   }, [village])
 
-  const payload = useMemo<WaterLogInput | SolarLogInput>(() => {
-    if (type === 'water') {
-      return {
-        year: Number(year) || currentYear,
-        month,
-        tehsil,
-        village,
-        settlement: settlement || undefined,
-        totalWaterPumping: totalWater ? Number(totalWater) : null,
-      }
-    }
+  const payload = useMemo<WaterLogInput>(() => {
+    const parts = parseIsoToYmd(logDateIso)
+    const y = parts?.y ?? currentYear
+    const m = parts?.m ?? new Date().getMonth() + 1
+    const d = parts?.d ?? new Date().getDate()
+    const hasTimes =
+      pumpStartTime.trim().length > 0 && pumpEndTime.trim().length > 0
     return {
-        year: Number(year) || currentYear,
-      month,
+      year: y,
+      month: m,
+      day: d,
       tehsil,
       village,
       settlement: settlement || undefined,
-      energyConsumedFromGrid: energyConsumed ? Number(energyConsumed) : null,
-      energyExportedToGrid: energyExported ? Number(energyExported) : null,
+      totalWaterPumping: totalWater ? Number(totalWater) : null,
+      pumpStartTime: hasTimes ? normalizeTo24hWithSeconds(pumpStartTime) : null,
+      pumpEndTime: hasTimes ? normalizeTo24hWithSeconds(pumpEndTime) : null,
     }
   }, [
-    energyConsumed,
-    energyExported,
-    month,
     currentYear,
+    logDateIso,
+    pumpEndTime,
+    pumpStartTime,
     settlement,
     tehsil,
     totalWater,
-    type,
     village,
-    year,
   ])
 
   useEffect(() => {
@@ -174,19 +208,35 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       .then((draft) => {
         if (!draft) return
         const p = draft.payload
-        setYear(String(p.year ?? currentYear))
-        setMonth(Number(p.month ?? new Date().getMonth() + 1))
+        const wp = p as WaterLogInput
+        if (
+          wp.year != null &&
+          wp.month != null &&
+          wp.day != null &&
+          Number.isFinite(Number(wp.year)) &&
+          Number.isFinite(Number(wp.month)) &&
+          Number.isFinite(Number(wp.day))
+        ) {
+          setLogDateIso(
+            isoFromYmd(Number(wp.year), Number(wp.month), Number(wp.day)),
+          )
+        } else {
+          setLogDateIso(getLocalIsoDateString())
+        }
         setTehsil(p.tehsil ?? '')
         setVillage(p.village ?? '')
         setSettlement(p.settlement ?? '')
-        if (type === 'water') {
-          const wp = p as WaterLogInput
-          setTotalWater(wp.totalWaterPumping != null ? String(wp.totalWaterPumping) : '')
-        } else {
-          const sp = p as SolarLogInput
-          setEnergyConsumed(sp.energyConsumedFromGrid != null ? String(sp.energyConsumedFromGrid) : '')
-          setEnergyExported(sp.energyExportedToGrid != null ? String(sp.energyExportedToGrid) : '')
-        }
+        setTotalWater(wp.totalWaterPumping != null ? String(wp.totalWaterPumping) : '')
+        setPumpStartTime(
+          wp.pumpStartTime != null
+            ? normalizeTo24hWithSeconds(String(wp.pumpStartTime))
+            : '',
+        )
+        setPumpEndTime(
+          wp.pumpEndTime != null
+            ? normalizeTo24hWithSeconds(String(wp.pumpEndTime))
+            : '',
+        )
       })
       .catch(() => {})
   }, [currentYear, draftId, type])
@@ -204,12 +254,17 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     setFacilityPrefetching(true)
     ;(async () => {
       try {
-        const list =
-          type === 'water'
-            ? ((await getWaterSystems()) as Array<Record<string, unknown>>)
-            : ((await getSolarSystems()) as Array<Record<string, unknown>>)
+        const list = (await getWaterSystems()) as Array<Record<string, unknown>>
         const found = list.find((r) => String(r?.id) === String(systemId))
-        if (!found || cancelled) return
+        if (cancelled) return
+        if (!found) {
+          Alert.alert(
+            'Not assigned',
+            'This water system is not assigned to your account. Please pick an assigned facility.',
+            [{ text: 'OK', onPress: () => navigation.navigate('Assignments') }],
+          )
+          return
+        }
         setTehsil(typeof found.tehsil === 'string' ? found.tehsil : '')
         setVillage(typeof found.village === 'string' ? found.village : '')
         const s = found.settlement
@@ -223,7 +278,75 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     return () => {
       cancelled = true
     }
-  }, [draftId, systemId, type])
+  }, [draftId, systemId, navigation])
+
+  // One row per system per calendar day: if a server row exists for this date, edit mode.
+  useEffect(() => {
+    if (!systemId || draftId) return
+    if (!tehsil || !village) return
+    const parts = parseIsoToYmd(logDateIso)
+    if (!parts) return
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const rows = await getWaterSupplyData({
+          tehsil,
+          village,
+          settlement,
+          year: parts.y,
+        })
+        if (cancelled) return
+        const match = rows.find((r) => {
+          if (!r || typeof r !== 'object') return false
+          const rr = r as Record<string, unknown>
+          const rd = rr.day != null ? Number(rr.day) : 1
+          return (
+            Number(rr.year) === parts.y &&
+            Number(rr.month) === parts.m &&
+            rd === parts.d
+          )
+        }) as Record<string, unknown> | undefined
+
+        if (match?.id) {
+          setExistingRecordId(String(match.id))
+          const tw = match.total_water_pumped
+          if (tw != null && String(tw) !== '') {
+            setTotalWater(String(tw))
+          }
+          const pst = match.pump_start_time
+          const pet = match.pump_end_time
+          setPumpStartTime(
+            pst != null && String(pst).trim()
+              ? normalizeTo24hWithSeconds(formatTimeForInput(pst))
+              : '',
+          )
+          setPumpEndTime(
+            pet != null && String(pet).trim()
+              ? normalizeTo24hWithSeconds(formatTimeForInput(pet))
+              : '',
+          )
+          const img = match.bulk_meter_image_url
+          setExistingImageUrl(typeof img === 'string' && img.trim() ? img.trim() : null)
+        } else {
+          setExistingRecordId(null)
+          setExistingImageUrl(null)
+          if (!draftId && systemId) {
+            setTotalWater('')
+            setPumpStartTime('')
+            setPumpEndTime('')
+          }
+        }
+      } catch {
+        setExistingRecordId(null)
+        setExistingImageUrl(null)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [draftId, logDateIso, settlement, systemId, tehsil, village])
 
   const openCamera = async () => {
     const res = await launchCamera({ mediaType: 'photo', quality: 0.8 })
@@ -238,23 +361,11 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
   }
 
   const validate = () => {
-    if (!/^\d{4}$/.test(year)) {
-      Alert.alert('Validation', 'Please enter a valid 4-digit year.')
-      return false
-    }
-    if (month < 1 || month > 12) {
-      Alert.alert('Validation', 'Please select a valid month.')
-      return false
-    }
-    const yNum = Number(year)
-    if (!Number.isFinite(yNum)) {
-      Alert.alert('Validation', 'Please enter a valid year.')
-      return false
-    }
-    if (!isYearMonthNotAfterNow(yNum, month)) {
+    const ld = logDateIso.trim()
+    if (!isValidIsoDate(ld) || !isIsoDatePastOrToday(ld)) {
       Alert.alert(
         'Validation',
-        'Reporting period cannot be in the future. Choose the current month or an earlier one.',
+        'Choose a valid log date (today or an earlier day).',
       )
       return false
     }
@@ -266,39 +377,37 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       Alert.alert('Validation', 'Please select settlement.')
       return false
     }
-    if (!asset?.uri) {
+    if (!asset?.uri && !existingImageUrl) {
       Alert.alert('Validation', 'Evidence image is mandatory. Please attach an image.')
       return false
     }
-    if (type === 'water') {
-      if (!isValidNumberInput(totalWater)) {
-        Alert.alert(
-          'Validation',
-          'Total Water Pumped (m³) is required and must be numeric.',
-        )
-        return false
-      }
-    } else {
-      if (!isValidNumberInput(energyConsumed)) {
-        Alert.alert('Validation', 'Energy consumed from grid is required and must be numeric.')
-        return false
-      }
-      if (!isValidNumberInput(energyExported)) {
-        Alert.alert('Validation', 'Energy exported to grid is required and must be numeric.')
-        return false
-      }
+    if (!isValidNumberInput(totalWater)) {
+      Alert.alert(
+        'Validation',
+        'Total Water Pumped (m³) is required and must be numeric.',
+      )
+      return false
+    }
+    const tStart = pumpStartTime.trim()
+    const tEnd = pumpEndTime.trim()
+    if (!tStart || !tEnd) {
+      Alert.alert(
+        'Validation',
+        'Select pump start and end time (AM/PM picker). Operating hours are calculated on the server.',
+      )
+      return false
+    }
+    if (!isValidTimeOfDayInput(tStart) || !isValidTimeOfDayInput(tEnd)) {
+      Alert.alert('Validation', 'Pump start and end times are invalid. Pick both again.')
+      return false
     }
     return true
   }
 
   const onSaveDraft = async () => {
-    if (!/^\d{4}$/.test(year)) {
-      Alert.alert('Draft', 'Enter a valid 4-digit year before saving draft.')
-      return
-    }
-    const yDraft = Number(year)
-    if (!isYearMonthNotAfterNow(yDraft, month)) {
-      Alert.alert('Draft', 'Reporting period cannot be in the future.')
+    const ld = logDateIso.trim()
+    if (!isValidIsoDate(ld) || !isIsoDatePastOrToday(ld)) {
+      Alert.alert('Draft', 'Choose a valid log date (today or earlier).')
       return
     }
     if (!tehsil || !village) {
@@ -323,24 +432,15 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     }
   }
 
-  const makeQueueItem = (): QueueItem =>
-    type === 'water'
-      ? {
-          id: `${type}-${Date.now()}`,
-          type: 'water',
-          payload: payload as WaterLogInput,
-          evidence: asset,
-          createdAt: new Date().toISOString(),
-          idempotencyKey: createIdempotencyKey('water'),
-        }
-      : {
-          id: `${type}-${Date.now()}`,
-          type: 'solar',
-          payload: payload as SolarLogInput,
-          evidence: asset,
-          createdAt: new Date().toISOString(),
-          idempotencyKey: createIdempotencyKey('solar'),
-        }
+  const makeQueueItem = (): QueueItem => ({
+    id: `${type}-${Date.now()}`,
+    type: 'water',
+    payload: payload as WaterLogInput,
+    evidence: asset,
+    ...(existingImageUrl ? { existingImageUrl } : {}),
+    createdAt: new Date().toISOString(),
+    idempotencyKey: createIdempotencyKey('water'),
+  })
 
   const submitOnline = async (idempotencyKey: string) => {
     let imageUrl: string | undefined
@@ -354,12 +454,10 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
           : typeof p === 'string' && p.trim()
             ? p.trim()
             : undefined
+    } else if (existingImageUrl) {
+      imageUrl = existingImageUrl
     }
-    if (type === 'water') {
-      await saveWaterSupplyData(payload as WaterLogInput, { idempotencyKey, imageUrl })
-    } else {
-      await saveSolarSupplyData(payload as SolarLogInput, { idempotencyKey, imageUrl })
-    }
+    await saveWaterSupplyData(payload as WaterLogInput, { idempotencyKey, imageUrl })
   }
 
   const onSubmit = async () => {
@@ -432,7 +530,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
         <MonthlyLogFormLoading variant={type} />
       ) : (
         <>
-      <Text style={styles.title}>{type === 'water' ? 'Water Supply Log' : 'Solar Log'}</Text>
+      <Text style={styles.title}>Water Supply Log</Text>
       {activeDraftId ? (
         <View style={styles.editingDraftBadge}>
           <Text style={styles.editingDraftBadgeText}>Editing saved draft</Text>
@@ -449,79 +547,100 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
           {queuedCount ? ` Pending queue: ${queuedCount}` : ''}
         </Text>
       </View>
+
+      <View style={styles.requirementsBox}>
+        <Text style={styles.requirementsTitle}>Required for submit</Text>
+        <Text style={styles.requirementsBody}>
+          Log date (defaults to today), tehsil & village (and settlement if listed), total water
+          pumped (m³), pump start & end time (server calculates operating hours), and bulk meter
+          photo. Sent as <Text style={styles.requirementsMono}>monthlyData[]</Text> with{' '}
+          <Text style={styles.requirementsMono}>day</Text> for <Text style={styles.requirementsMono}>log_date</Text>.
+        </Text>
+      </View>
+
       <View style={styles.field}>
-        <Text style={styles.label}>Year</Text>
-        <TextInput
-          value={year}
-          onChangeText={(value) => setYear(sanitizeIntegerInput(value))}
-          keyboardType="number-pad"
-          maxLength={4}
-          style={styles.input}
+        <RequiredLabel>Log date</RequiredLabel>
+        <DatePickerField
+          label=""
+          value={logDateIso}
+          onChange={setLogDateIso}
+          placeholder={getLocalIsoDateString()}
+          disabled={periodLocked}
         />
       </View>
 
       <SelectField
-        label="Month"
-        value={MONTHS.find((m) => m.value === month)?.label}
-        onPress={() => setPicker({ title: 'Month', key: 'settlement', options: MONTHS.map((m) => m.label) })}
-      />
-
-      <SelectField
         label="Tehsil"
         value={tehsil}
+        disabled={periodLocked}
         onPress={() => setPicker({ title: 'Tehsil', key: 'tehsil', options: [...TEHSIL_OPTIONS] })}
       />
       <SelectField
         label="Village"
         value={village}
+        disabled={periodLocked}
         onPress={() => setPicker({ title: 'Village', key: 'village', options: villageOptions })}
       />
       <SelectField
         label="Settlement"
         value={settlement}
+        disabled={periodLocked}
         onPress={() => setPicker({ title: 'Settlement', key: 'settlement', options: settlementOptions })}
       />
 
-      {type === 'water' ? (
-        <>
-          <Text style={[styles.helper, styles.waterMeterHint]}>
-            Enter the monthly total from your water meter reading (m³).
+      <>
+        <Text style={[styles.helper, styles.waterMeterHint]}>
+          Enter the monthly total from your water meter reading (m³). Sent as{' '}
+          <Text style={styles.requirementsMono}>total_water_pumped</Text>.
+        </Text>
+        <View style={styles.field}>
+          <RequiredLabel>Total water pumped (m³)</RequiredLabel>
+          <TextInput
+            value={totalWater}
+            onChangeText={(value) => setTotalWater(sanitizeDecimalInput(value))}
+            keyboardType="decimal-pad"
+            style={styles.input}
+          />
+        </View>
+      </>
+
+      <Text style={styles.subsectionTitle}>Pump run</Text>
+      <Text style={[styles.helper, styles.pumpIntro]}>
+        Choose start and end using the clock (12-hour with AM/PM). The server sets{' '}
+        <Text style={styles.requirementsMono}>pump_operating_hours</Text> from this interval.
+      </Text>
+      <View style={styles.field}>
+        <RequiredLabel>Pump start</RequiredLabel>
+        <AmPmTimePickerField
+          label=""
+          value={pumpStartTime}
+          onChange={setPumpStartTime}
+          placeholder="Tap to select start time"
+        />
+      </View>
+      <View style={styles.field}>
+        <RequiredLabel>Pump end</RequiredLabel>
+        <AmPmTimePickerField
+          label=""
+          value={pumpEndTime}
+          onChange={setPumpEndTime}
+          placeholder="Tap to select end time"
+        />
+      </View>
+
+      {existingRecordId ? (
+        <View style={styles.facilityBadge}>
+          <Text style={styles.facilityBadgeText}>
+            Existing log found for this date. You are editing it now.
           </Text>
-          <View style={styles.field}>
-            <Text style={styles.label}>Total Water Pumped (m³)</Text>
-            <TextInput
-              value={totalWater}
-              onChangeText={(value) => setTotalWater(sanitizeDecimalInput(value))}
-              keyboardType="decimal-pad"
-              style={styles.input}
-            />
-          </View>
-        </>
-      ) : (
-        <>
-          <View style={styles.field}>
-            <Text style={styles.label}>Energy Consumed From Grid (kWh)</Text>
-            <TextInput
-              value={energyConsumed}
-              onChangeText={(value) => setEnergyConsumed(sanitizeDecimalInput(value))}
-              keyboardType="decimal-pad"
-              style={styles.input}
-            />
-          </View>
-          <View style={styles.field}>
-            <Text style={styles.label}>Energy Exported To Grid (kWh)</Text>
-            <TextInput
-              value={energyExported}
-              onChangeText={(value) => setEnergyExported(sanitizeDecimalInput(value))}
-              keyboardType="decimal-pad"
-              style={styles.input}
-            />
-          </View>
-        </>
-      )}
+        </View>
+      ) : null}
 
       <View style={styles.field}>
-        <Text style={styles.label}>Supporting Evidence</Text>
+        <RequiredLabel>Bulk meter evidence (photo)</RequiredLabel>
+        <Text style={styles.helper}>
+          Upload a new photo, or keep the existing server image when editing.
+        </Text>
         <View style={styles.row}>
           <Pressable style={styles.actionBtn} onPress={openCamera}>
             <Text style={styles.actionText}>Camera</Text>
@@ -530,7 +649,13 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
             <Text style={styles.actionText}>Gallery</Text>
           </Pressable>
         </View>
-        <Text style={styles.helper}>{asset?.fileName || asset?.uri || 'No image selected'}</Text>
+        <Text style={styles.helper}>
+          {asset?.fileName || asset?.uri
+            ? `New: ${asset?.fileName ?? 'image'}`
+            : existingImageUrl
+              ? 'Using existing meter image on server.'
+              : 'No image selected'}
+        </Text>
       </View>
 
       <View style={styles.row}>
@@ -550,10 +675,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
         onClose={() => setPicker(null)}
         onSelect={(option) => {
           if (!picker) return
-          if (picker.title === 'Month') {
-            const selected = MONTHS.find((m) => m.label === option)
-            if (selected) setMonth(selected.value)
-          } else if (picker.key === 'tehsil') {
+          if (picker.key === 'tehsil') {
             setTehsil(option)
             setVillage('')
             setSettlement('')
@@ -615,6 +737,30 @@ const styles = StyleSheet.create({
   },
   statusBannerText: { color: '#1d4ed8', fontWeight: '700', fontSize: 12 },
   statusBannerTextOffline: { color: '#b91c1c' },
+  requirementsBox: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  requirementsTitle: {
+    color: '#0f172a',
+    fontWeight: '800',
+    fontSize: 13,
+    marginBottom: 6,
+  },
+  requirementsBody: { color: '#475569', fontSize: 12, lineHeight: 18 },
+  requirementsMono: { fontSize: 11, color: '#334155', fontWeight: '600' },
+  subsectionTitle: {
+    color: '#0f172a',
+    fontWeight: '800',
+    fontSize: 15,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  requiredMark: { color: '#dc2626', fontWeight: '900' },
   field: { marginBottom: 10 },
   label: { color: '#475569', marginBottom: 6, fontWeight: '700' },
   input: {
@@ -635,8 +781,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   selectText: { color: '#0f172a' },
+  selectDisabled: { backgroundColor: '#f1f5f9', opacity: 0.85 },
+  selectTextDisabled: { color: '#64748b' },
+  inputDisabled: { backgroundColor: '#f1f5f9', color: '#64748b' },
   row: { flexDirection: 'row', gap: 10 },
   waterMeterHint: { marginTop: 4, marginBottom: 10, fontSize: 13 },
+  pumpIntro: { marginBottom: 8 },
   actionBtn: {
     flex: 1,
     borderRadius: 10,

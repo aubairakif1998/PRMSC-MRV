@@ -3,23 +3,24 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import NetInfo from '@react-native-community/netinfo';
-import {
-  ClipboardList,
-  Droplets,
-  FileText,
-  Inbox,
-  Sun,
-  Zap,
-} from 'lucide-react-native';
+import { FileText, Inbox } from 'lucide-react-native';
 
-import type { RootStackParamList } from '../navigation/types';
-import { useAuth } from '../auth/AuthContext';
-import { drainQueue, getQueue } from '../offline/queue';
-import type { QueueItem } from '../types/operator';
-import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Separator } from '../components/ui/separator';
-import { Text } from '../components/ui/text';
+import type { RootStackParamList } from '../../navigation/types';
+import { useAuth } from '../../auth/AuthContext';
+import { drainQueue, getQueue } from '../../offline/queue';
+import type { QueueItem } from '../../types/operator';
+import { getWaterSystems } from '../../api/operator';
+import { Button } from '../../components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '../../components/ui/card';
+import { Separator } from '../../components/ui/separator';
+import { Text } from '../../components/ui/text';
+import { getApiErrorMessage } from '../../lib/api-error';
+import { HomeAssignmentsLoading } from '../shared/screenSkeletons';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -39,7 +40,9 @@ function HomeSection({
           {title}
         </Text>
         {hint ? (
-          <Text className="mt-1 text-[11px] leading-4 text-muted-foreground">{hint}</Text>
+          <Text className="mt-1 text-[11px] leading-4 text-muted-foreground">
+            {hint}
+          </Text>
         ) : null}
       </View>
       <View className="p-3">{children}</View>
@@ -94,6 +97,11 @@ export function HomeScreen({ navigation }: Props) {
   const [queuedCount, setQueuedCount] = React.useState(0);
   const [queuedItems, setQueuedItems] = React.useState<QueueItem[]>([]);
   const [syncMessage, setSyncMessage] = React.useState('');
+  const [assignedSystems, setAssignedSystems] = React.useState<
+    Array<Record<string, unknown>>
+  >([]);
+  const [assignmentsLoading, setAssignmentsLoading] = React.useState(true);
+  const [assignmentsError, setAssignmentsError] = React.useState('');
 
   const refreshQueueCount = React.useCallback(async () => {
     const items = await getQueue();
@@ -149,6 +157,28 @@ export function HomeScreen({ navigation }: Props) {
     }, [runQueueSync]),
   );
 
+  const loadAssignments = React.useCallback(async () => {
+    setAssignmentsLoading(true);
+    setAssignmentsError('');
+    try {
+      const systems = (await getWaterSystems()) as Array<
+        Record<string, unknown>
+      >;
+      setAssignedSystems(systems ?? []);
+    } catch (e: unknown) {
+      setAssignmentsError(
+        getApiErrorMessage(e, 'Could not load assigned water systems.'),
+      );
+      setAssignedSystems([]);
+    } finally {
+      setAssignmentsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAssignments().catch(() => {});
+  }, [loadAssignments]);
+
   return (
     <View className="flex-1 bg-muted/30">
       <ScrollView
@@ -166,74 +196,114 @@ export function HomeScreen({ navigation }: Props) {
         {!!syncMessage && (
           <Card className="mb-3 border-primary/30 bg-primary/5 py-2">
             <CardContent className="py-2">
-              <Text className="text-xs font-medium text-primary">{syncMessage}</Text>
+              <Text className="text-xs font-medium text-primary">
+                {syncMessage}
+              </Text>
             </CardContent>
           </Card>
         )}
 
         <HomeSection
-          title="New facility"
-          hint="First-time registration for a water or solar site."
+          title="My assignments"
+          hint="Water systems assigned to you. One monthly log per system and period. The log form requires year/month, location, total water (m³), pump times or operating hours, and a bulk meter photo (API: water-supply-data)."
         >
-          <View className="flex-row gap-2">
-            <HomeTile
-              icon={<Droplets color="#0369a1" size={26} strokeWidth={2} />}
-              title="Register water facility"
-              accessibilityLabel="Register water facility"
-              onPress={() => navigation.navigate('WaterSystemRegister')}
-            />
-            <HomeTile
-              icon={<Sun color="#c2410c" size={26} strokeWidth={2} />}
-              title="Register solar site"
-              accessibilityLabel="Register solar site"
-              onPress={() => navigation.navigate('SolarSystemRegister')}
-            />
-          </View>
+          {assignmentsLoading ? (
+            <HomeAssignmentsLoading />
+          ) : assignmentsError ? (
+            <Card className="border-destructive/40">
+              <CardContent className="py-4">
+                <Text className="text-destructive text-sm">
+                  {assignmentsError}
+                </Text>
+                <Pressable
+                  onPress={() => loadAssignments().catch(() => {})}
+                  className="mt-3"
+                >
+                  <Text className="text-primary font-semibold">Try again</Text>
+                </Pressable>
+              </CardContent>
+            </Card>
+          ) : assignedSystems.length === 0 ? (
+            <Card className="border-border/70 bg-background">
+              <CardContent className="py-4">
+                <Text className="text-foreground text-sm font-semibold">
+                  No assigned water systems
+                </Text>
+                <Text className="text-muted-foreground mt-1 text-xs">
+                  Contact your Tehsil Manager to assign a water system to your
+                  account.
+                </Text>
+              </CardContent>
+            </Card>
+          ) : (
+            <View className="gap-2">
+              {assignedSystems.slice(0, 3).map(s => {
+                const id = String(s.id ?? '');
+                const tehsil = String(s.tehsil ?? '');
+                const village = String(s.village ?? '');
+                const settlement =
+                  s.settlement != null ? String(s.settlement) : '';
+                const uid =
+                  s.unique_identifier != null
+                    ? String(s.unique_identifier)
+                    : '';
+                const label = [tehsil, village, settlement]
+                  .filter(Boolean)
+                  .join(' · ');
+                return (
+                  <Card
+                    key={id || uid}
+                    className="border-border/70 bg-background"
+                  >
+                    <CardContent className="py-3">
+                      <View className="flex-row items-start justify-between gap-3">
+                        <View className="min-w-0 flex-1">
+                          <Text
+                            className="font-semibold text-foreground"
+                            numberOfLines={2}
+                          >
+                            {label || 'Assigned water system'}
+                          </Text>
+                          {uid ? (
+                            <Text
+                              className="text-muted-foreground mt-1 font-mono text-xs"
+                              numberOfLines={1}
+                            >
+                              {uid}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <Button
+                          variant="secondary"
+                          onPress={() =>
+                            navigation.navigate('WaterLog', {
+                              systemId: id,
+                              facilityLabel: label,
+                            })
+                          }
+                        >
+                          Log / Edit
+                        </Button>
+                      </View>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+
+              <Button
+                variant="outline"
+                onPress={() => navigation.navigate('Assignments')}
+              >
+                View all assignments
+              </Button>
+            </View>
+          )}
         </HomeSection>
 
         <HomeSection
-          title="Monthly log"
-          hint="Full form: month, location, readings, and photo evidence."
+          title="Records"
+          hint="Server status and local drafts on this device."
         >
-          <View className="flex-row gap-2">
-            <HomeTile
-              icon={<ClipboardList color="#0284c7" size={26} strokeWidth={2} />}
-              title="Monthly water log"
-              accessibilityLabel="Monthly water log"
-              onPress={() => navigation.navigate('WaterLog')}
-            />
-            <HomeTile
-              icon={<ClipboardList color="#d97706" size={26} strokeWidth={2} />}
-              title="Monthly solar log"
-              accessibilityLabel="Monthly solar log"
-              onPress={() => navigation.navigate('SolarLog')}
-            />
-          </View>
-        </HomeSection>
-
-        <HomeSection
-          title="Quick log"
-          hint="Pick a saved facility — location fields fill in."
-        >
-          <View className="flex-row gap-2">
-            <HomeTile
-              icon={<Zap color="#0e7490" size={24} strokeWidth={2} />}
-              title="Quick log (water)"
-              subtitle="Saved facility"
-              accessibilityLabel="Quick log water, saved facility"
-              onPress={() => navigation.navigate('PickFacility', { kind: 'water' })}
-            />
-            <HomeTile
-              icon={<Zap color="#ca8a04" size={24} strokeWidth={2} />}
-              title="Quick log (solar)"
-              subtitle="Saved facility"
-              accessibilityLabel="Quick log solar, saved facility"
-              onPress={() => navigation.navigate('PickFacility', { kind: 'solar' })}
-            />
-          </View>
-        </HomeSection>
-
-        <HomeSection title="Records" hint="Server status and local drafts on this device.">
           <View className="flex-row gap-2">
             <HomeTile
               icon={<Inbox color="#6d28d9" size={26} strokeWidth={2} />}
@@ -273,7 +343,7 @@ export function HomeScreen({ navigation }: Props) {
                   {idx > 0 ? <Separator /> : null}
                   <View className="flex-row items-center justify-between py-2.5">
                     <Text className="font-semibold text-foreground">
-                      {item.type === 'water' ? 'Water log' : 'Solar log'}
+                      Water log
                     </Text>
                     <Text className="text-muted-foreground text-xs">
                       {new Date(item.createdAt).toLocaleString()}

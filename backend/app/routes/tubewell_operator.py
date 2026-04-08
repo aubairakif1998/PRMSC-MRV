@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app
 from app.extensions import db
-from sqlalchemy import extract
+from sqlalchemy import extract, or_
 
 from app.constants.tehsils import canonical_tehsil
 from app.models.models import (
@@ -55,6 +55,7 @@ from app.utils.in_app_notifications import (
     mark_all_notifications_read_response,
     mark_notification_read_response,
 )
+import calendar
 from datetime import date, datetime
 
 tubewell_operator_bp = Blueprint("tubewell_operator", __name__)
@@ -410,7 +411,12 @@ def get_water_system_config():
     if settlement:
         query = WaterSystem.query.filter_by(tehsil=ct, village=village, settlement=settlement)
     else:
-        query = WaterSystem.query.filter_by(tehsil=ct, village=village).filter(WaterSystem.settlement == None)
+        query = WaterSystem.query.filter_by(tehsil=ct, village=village).filter(
+            or_(
+                WaterSystem.settlement.is_(None),
+                WaterSystem.settlement == "",
+            )
+        )
     
     system = query.first()
 
@@ -478,6 +484,7 @@ def get_water_drafts():
                 "tehsil": system.tehsil if system else "Unknown",
                 "year": draft.log_date.year if draft.log_date else None,
                 "month": draft.log_date.month if draft.log_date else None,
+                "day": draft.log_date.day if draft.log_date else None,
                 "status": draft.status,
                 "created_at": draft.created_at.isoformat() if draft.created_at else None,
             }
@@ -511,6 +518,7 @@ def get_water_draft(record_id):
             "water_system_id": str(record.water_system_id),
             "year": record.log_date.year if record.log_date else None,
             "month": record.log_date.month if record.log_date else None,
+            "day": record.log_date.day if record.log_date else None,
             "pump_start_time": time_to_json(record.pump_start_time),
             "pump_end_time": time_to_json(record.pump_end_time),
             "pump_operating_hours": record.pump_operating_hours,
@@ -555,15 +563,28 @@ def update_water_draft(record_id):
     apply_pump_time_fields_from_payload(record, data)
     if "total_water_pumped" in data:
         record.total_water_pumped = data["total_water_pumped"]
-    if "year" in data or "month" in data:
+    if "year" in data or "month" in data or "day" in data:
         y = data.get("year", record.log_date.year if record.log_date else None)
         m = data.get("month", record.log_date.month if record.log_date else None)
+        d = data.get("day", record.log_date.day if record.log_date else None)
         if y is None or m is None:
             return jsonify({"error": "year and month are required to update period"}), 400
         try:
-            record.log_date = date(int(y), int(m), 1)
+            yi, mi = int(y), int(m)
+            if d is None:
+                today = date.today()
+                if yi == today.year and mi == today.month:
+                    di = min(today.day, calendar.monthrange(yi, mi)[1])
+                else:
+                    di = 1
+            else:
+                di = int(d)
+            last = calendar.monthrange(yi, mi)[1]
+            if di < 1 or di > last:
+                return jsonify({"error": f"day must be between 1 and {last}"}), 400
+            record.log_date = date(yi, mi, di)
         except (TypeError, ValueError):
-            return jsonify({"error": "Invalid year or month"}), 400
+            return jsonify({"error": "Invalid year, month, or day"}), 400
 
     db.session.commit()
 
@@ -721,7 +742,12 @@ def get_water_supply_data():
         system = WaterSystem.query.filter_by(
             tehsil=ct,
             village=village
-        ).filter(WaterSystem.settlement == None).first()
+        ).filter(
+            or_(
+                WaterSystem.settlement.is_(None),
+                WaterSystem.settlement == "",
+            )
+        ).first()
     
     if not system:
         return jsonify([]), 200
@@ -743,10 +769,12 @@ def get_water_supply_data():
                 "id": str(r.id),
                 "year": r.log_date.year if r.log_date else None,
                 "month": r.log_date.month if r.log_date else None,
+                "day": r.log_date.day if r.log_date else None,
                 "pump_start_time": time_to_json(r.pump_start_time),
                 "pump_end_time": time_to_json(r.pump_end_time),
                 "pump_operating_hours": r.pump_operating_hours,
                 "total_water_pumped": r.total_water_pumped,
+                "bulk_meter_image_url": r.bulk_meter_image_url,
                 "status": r.status,
                 "remarks": r.remarks,
             }
@@ -765,9 +793,24 @@ def save_water_supply_data():
     Save monthly water supply data for multiple locations.
     Request body: { data: [...], year: 2025, status: 'drafted'|'submitted' }
     """
-    data = request.get_json()
-    rows = data.get('data', [])
-    year = data.get('year', datetime.now().year)
+    data = request.get_json(silent=True) or {}
+    raw_rows = data.get("data")
+    if raw_rows is None:
+        rows = []
+    elif not isinstance(raw_rows, list):
+        return jsonify(
+            {
+                "message": "Invalid payload",
+                "errors": ["data must be a JSON array"],
+            }
+        ), 400
+    else:
+        rows = raw_rows
+    year_raw = data.get('year', datetime.now().year)
+    try:
+        year = int(year_raw)
+    except (TypeError, ValueError):
+        return jsonify({"message": "Invalid year", "errors": ["year must be an integer"]}), 400
     status = normalize_water_submission_status(data.get('status'))
     image_url = data.get('image_url') or data.get('image_path')
     current_user_id = get_jwt_identity()
@@ -782,10 +825,25 @@ def save_water_supply_data():
 
     for i, row in enumerate(rows):
         try:
+            if not isinstance(row, dict):
+                errors.append(f"Row {i+1}: each data item must be an object")
+                continue
             tehsil = row.get('tehsil')
-            village = row.get('village')
-            settlement = row.get('settlement', '')
+            village = (row.get('village') or '').strip() if isinstance(row.get('village'), str) else row.get('village')
+            if village is not None and not isinstance(village, str):
+                village = str(village).strip()
+            settlement = row.get('settlement', '') or ''
+            if isinstance(settlement, str):
+                settlement = settlement.strip()
+            else:
+                settlement = str(settlement).strip() if settlement is not None else ''
             monthly_data = row.get('monthlyData', [])
+            if not isinstance(monthly_data, list):
+                errors.append(f"Row {i+1}: monthlyData must be an array")
+                continue
+            if not village:
+                errors.append(f"Row {i+1}: missing village")
+                continue
 
             ct = canonical_tehsil(tehsil)
             if not ct:
@@ -807,7 +865,12 @@ def save_water_supply_data():
                 system = WaterSystem.query.filter_by(
                     tehsil=ct,
                     village=village
-                ).filter(WaterSystem.settlement == None).first()
+                ).filter(
+                    or_(
+                        WaterSystem.settlement.is_(None),
+                        WaterSystem.settlement == "",
+                    )
+                ).first()
 
             if not system:
                 errors.append(
@@ -825,16 +888,56 @@ def save_water_supply_data():
 
             # Save monthly data
             for month_record in monthly_data:
+                if not isinstance(month_record, dict):
+                    errors.append(f"Row {i+1}: each monthlyData item must be an object")
+                    continue
                 month = month_record.get("month")
-                pump_hours = month_record.get("pump_operating_hours")
-                total_water = month_record.get("total_water_pumped")
+                try:
+                    pump_hours = _coerce_optional_float(
+                        month_record.get("pump_operating_hours")
+                    )
+                    total_water = _coerce_optional_float(
+                        month_record.get("total_water_pumped")
+                    )
+                except ValueError as ve:
+                    errors.append(
+                        f"Row {i+1}: invalid number in monthlyData ({ve})"
+                    )
+                    continue
                 if month is None:
                     errors.append(f"Row {i+1}: missing month in monthlyData")
                     raise ValueError("missing month")
                 try:
-                    log_d = date(int(year), int(month), 1)
+                    yi, mi = int(year), int(month)
                 except (TypeError, ValueError):
                     errors.append(f"Row {i+1}: invalid year or month in monthlyData")
+                    raise ValueError("invalid date")
+                day_raw = month_record.get("day")
+                today = date.today()
+                if day_raw is None or (
+                    isinstance(day_raw, str) and not str(day_raw).strip()
+                ):
+                    # Default: today's calendar day if logging the current month, else 1st
+                    if yi == today.year and mi == today.month:
+                        day = min(today.day, calendar.monthrange(yi, mi)[1])
+                    else:
+                        day = 1
+                else:
+                    try:
+                        day = int(day_raw)
+                    except (TypeError, ValueError):
+                        errors.append(f"Row {i+1}: invalid day in monthlyData")
+                        raise ValueError("invalid day")
+                last = calendar.monthrange(yi, mi)[1]
+                if day < 1 or day > last:
+                    errors.append(
+                        f"Row {i+1}: day must be between 1 and {last} for this month"
+                    )
+                    raise ValueError("invalid day range")
+                try:
+                    log_d = date(yi, mi, day)
+                except (TypeError, ValueError):
+                    errors.append(f"Row {i+1}: invalid log date")
                     raise ValueError("invalid date")
 
                 existing = WaterEnergyLoggingDaily.query.filter_by(

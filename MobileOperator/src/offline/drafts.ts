@@ -1,16 +1,16 @@
 import { STORAGE_KEYS } from '../storage/keys'
 import { getJson, setJson } from '../storage/jsonStorage'
-import type { LogType, SolarLogInput, WaterLogInput } from '../types/operator'
+import type { LogType, WaterLogInput } from '../types/operator'
 
 export type DraftRecord = {
   id: string
   type: LogType
-  payload: WaterLogInput | SolarLogInput
+  payload: WaterLogInput
   createdAt: string
 }
 
-function keyByType(type: LogType) {
-  return type === 'water' ? STORAGE_KEYS.waterDrafts : STORAGE_KEYS.solarDrafts
+function keyByType(_type: LogType) {
+  return STORAGE_KEYS.waterDrafts
 }
 
 export async function getDrafts(type: LogType): Promise<DraftRecord[]> {
@@ -22,7 +22,7 @@ export async function getDraftById(type: LogType, draftId: string): Promise<Draf
   return drafts.find((d) => d.id === draftId) ?? null
 }
 
-export async function saveDraft(type: LogType, payload: WaterLogInput | SolarLogInput): Promise<void> {
+export async function saveDraft(type: LogType, payload: WaterLogInput): Promise<void> {
   const drafts = await getDrafts(type)
   drafts.unshift({
     id: `${type}-${Date.now()}`,
@@ -36,7 +36,7 @@ export async function saveDraft(type: LogType, payload: WaterLogInput | SolarLog
 export async function updateDraft(
   type: LogType,
   draftId: string,
-  payload: WaterLogInput | SolarLogInput,
+  payload: WaterLogInput,
 ): Promise<void> {
   const drafts = await getDrafts(type)
   const next = drafts.map((d) => (d.id === draftId ? { ...d, payload } : d))

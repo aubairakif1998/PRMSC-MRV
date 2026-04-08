@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
+from app.utils.operator_helpers import coerce_optional_float
+
 
 def parse_time_of_day(value: Any) -> time | None:
     """Parse user input into a time-of-day (no timezone). Accepts time, or strings like HH:MM, HH:MM:SS, or ISO datetime."""
@@ -66,4 +68,4 @@ def apply_pump_time_fields_from_payload(record: Any, data: dict) -> None:
             record.pump_start_time, record.pump_end_time
         )
     elif "pump_operating_hours" in data:
-        record.pump_operating_hours = data.get("pump_operating_hours")
+        record.pump_operating_hours = coerce_optional_float(data.get("pump_operating_hours"))

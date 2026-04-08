@@ -23,15 +23,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ChevronLeft,
   ClipboardList,
-  Droplets,
   FileText,
   Home,
   Inbox,
   LogOut,
   Menu,
-  Sun,
   X,
-  Zap,
 } from 'lucide-react-native';
 
 import { useAuth } from '../auth/AuthContext';
@@ -65,7 +62,6 @@ type DrawerIcon = React.ComponentType<{
 const DRAWER_ACCENTS = {
   neutral: { fg: '#475569', bg: '#f1f5f9', border: '#e2e8f0' },
   water: { fg: '#0369a1', bg: '#e0f2fe', border: '#bae6fd' },
-  solar: { fg: '#b45309', bg: '#fff7ed', border: '#fed7aa' },
   danger: { fg: '#b91c1c', bg: '#fef2f2', border: '#fecaca' },
 } as const;
 
@@ -229,82 +225,15 @@ export function AppDrawerProvider({ children }: { children: React.ReactNode }) {
 
               <DrawerDivider />
 
-              <DrawerSectionLabel>New facility</DrawerSectionLabel>
-              <DrawerNavRow
-                icon={Droplets}
-                label="Register water facility"
-                accent="water"
-                onPress={() =>
-                  closeDrawer(() => {
-                    if (navigationRef.isReady()) {
-                      navigationRef.navigate('WaterSystemRegister');
-                    }
-                  })
-                }
-              />
-              <DrawerNavRow
-                icon={Sun}
-                label="Register solar site"
-                accent="solar"
-                onPress={() =>
-                  closeDrawer(() => {
-                    if (navigationRef.isReady()) {
-                      navigationRef.navigate('SolarSystemRegister');
-                    }
-                  })
-                }
-              />
-
-              <DrawerDivider />
-
               <DrawerSectionLabel>Monthly</DrawerSectionLabel>
               <DrawerNavRow
                 icon={ClipboardList}
-                label="Log water monthly"
+                label="My assignments"
                 accent="water"
                 onPress={() =>
                   closeDrawer(() => {
                     if (navigationRef.isReady())
-                      navigationRef.navigate('WaterLog');
-                  })
-                }
-              />
-              <DrawerNavRow
-                icon={ClipboardList}
-                label="Log solar monthly"
-                accent="solar"
-                onPress={() =>
-                  closeDrawer(() => {
-                    if (navigationRef.isReady())
-                      navigationRef.navigate('SolarLog');
-                  })
-                }
-              />
-
-              <DrawerDivider />
-
-              <DrawerSectionLabel>Quick</DrawerSectionLabel>
-              <DrawerNavRow
-                icon={Zap}
-                label="Quick log water (saved facility)"
-                accent="water"
-                onPress={() =>
-                  closeDrawer(() => {
-                    if (navigationRef.isReady()) {
-                      navigationRef.navigate('PickFacility', { kind: 'water' });
-                    }
-                  })
-                }
-              />
-              <DrawerNavRow
-                icon={Zap}
-                label="Quick log solar (saved facility)"
-                accent="solar"
-                onPress={() =>
-                  closeDrawer(() => {
-                    if (navigationRef.isReady()) {
-                      navigationRef.navigate('PickFacility', { kind: 'solar' });
-                    }
+                      navigationRef.navigate('Assignments');
                   })
                 }
               />

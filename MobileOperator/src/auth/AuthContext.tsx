@@ -69,7 +69,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (email: string, password: string): Promise<LoginResult> => {
       try {
         const data: LoginResponse = await loginApi(email, password);
-        if (data.user.role !== 'operator') {
+        // MobileOperator is strictly for tubewell operators.
+        if (String(data.user.role).toUpperCase() !== 'USER') {
           await Promise.all([
             AsyncStorage.removeItem(STORAGE_KEYS.token),
             AsyncStorage.removeItem(STORAGE_KEYS.user),
@@ -77,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setState(s => ({ ...s, token: null, user: null }));
           return {
             ok: false,
-            message: 'This mobile app is for operators only.',
+            message: 'This mobile app is for tubewell operators only.',
           };
         }
         await AsyncStorage.setItem(STORAGE_KEYS.token, data.token);

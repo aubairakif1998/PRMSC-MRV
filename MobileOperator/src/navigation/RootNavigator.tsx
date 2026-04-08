@@ -11,18 +11,19 @@ import {
 } from './AppDrawer';
 import { navigationRef } from './navigationRef';
 import type { RootStackParamList } from './types';
-import { LoginScreen } from '../screens/LoginScreen';
-import { HomeScreen } from '../screens/HomeScreen';
-import { WaterSystemRegisterScreen } from '../screens/WaterSystemRegisterScreen';
-import { SolarSystemRegisterScreen } from '../screens/SolarSystemRegisterScreen';
-import { WaterLogScreen } from '../screens/WaterLogScreen';
-import { SolarLogScreen } from '../screens/SolarLogScreen';
-import { DraftsScreen } from '../screens/DraftsScreen';
-import { MySubmissionsScreen } from '../screens/MySubmissionsScreen';
-import { SubmissionDetailScreen } from '../screens/SubmissionDetailScreen';
-import { PickFacilityScreen } from '../screens/PickFacilityScreen';
+import { LoginScreen } from '../features/auth/LoginScreen';
+import { HomeScreen } from '../features/home/HomeScreen';
+import { AssignmentsScreen } from '../features/assignments/AssignmentsScreen';
+import { WaterLogScreen } from '../features/logging/WaterLogScreen';
+import { DraftsScreen } from '../features/drafts/DraftsScreen';
+import { MySubmissionsScreen } from '../features/submissions/MySubmissionsScreen';
+import { SubmissionDetailScreen } from '../features/submissions/SubmissionDetailScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+const headerLeft = () => <AppHeaderLeft />;
+const headerRight = () => <AppHeaderAvatar />;
+const headerTitle = () => <AppHeaderTitle />;
 
 export function RootNavigator() {
   const { token, loading } = useAuth();
@@ -36,8 +37,8 @@ export function RootNavigator() {
           screenOptions={
             token
               ? {
-                  headerLeft: () => <AppHeaderLeft />,
-                  headerRight: () => <AppHeaderAvatar />,
+                  headerLeft,
+                  headerRight,
                   headerTitleAlign: 'center',
                 }
               : undefined
@@ -55,7 +56,7 @@ export function RootNavigator() {
                 name="Home"
                 component={HomeScreen}
                 options={{
-                  headerTitle: () => <AppHeaderTitle />,
+                  headerTitle,
                   headerTitleAlign: 'center',
                   // headerTitleContainerStyle: {
                   //   position: 'absolute',
@@ -67,24 +68,9 @@ export function RootNavigator() {
                 }}
               />
               <Stack.Screen
-                name="WaterSystemRegister"
-                component={WaterSystemRegisterScreen}
-                options={{ title: 'Register water system' }}
-              />
-              <Stack.Screen
-                name="SolarSystemRegister"
-                component={SolarSystemRegisterScreen}
-                options={{ title: 'Register solar site' }}
-              />
-              <Stack.Screen
-                name="PickFacility"
-                component={PickFacilityScreen}
-                options={({ route }) => ({
-                  title:
-                    route.params.kind === 'water'
-                      ? 'Quick log — water'
-                      : 'Quick log — solar',
-                })}
+                name="Assignments"
+                component={AssignmentsScreen}
+                options={{ title: 'My assignments' }}
               />
               <Stack.Screen
                 name="WaterLog"
@@ -96,18 +82,6 @@ export function RootNavigator() {
                     : params?.draftId
                     ? `water-log-draft-${params.draftId}`
                     : 'water-log-new'
-                }
-              />
-              <Stack.Screen
-                name="SolarLog"
-                component={SolarLogScreen}
-                options={{ title: 'Solar monthly log' }}
-                getId={({ params }) =>
-                  params?.systemId != null && params.systemId !== ''
-                    ? `solar-log-sys-${String(params.systemId)}`
-                    : params?.draftId
-                    ? `solar-log-draft-${params.draftId}`
-                    : 'solar-log-new'
                 }
               />
               <Stack.Screen

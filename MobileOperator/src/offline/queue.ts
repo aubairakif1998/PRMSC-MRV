@@ -3,7 +3,7 @@ import NetInfo from '@react-native-community/netinfo'
 import { STORAGE_KEYS } from '../storage/keys'
 import { getJson, setJson } from '../storage/jsonStorage'
 import type { QueueItem } from '../types/operator'
-import { saveSolarSupplyData, saveWaterSupplyData, uploadEvidenceFile } from '../api/operator'
+import { saveWaterSupplyData, uploadEvidenceFile } from '../api/operator'
 
 type DrainQueueResult = {
   processed: number
@@ -22,11 +22,12 @@ function normalizePart(value: string | undefined): string {
 }
 
 export function buildQueueKey(item: QueueItem): string {
-  const { year, month, tehsil, village, settlement } = item.payload
+  const { year, month, day, tehsil, village, settlement } = item.payload
   return [
     item.type,
     String(year),
     String(month),
+    String(day),
     normalizePart(tehsil),
     normalizePart(village),
     normalizePart(settlement),
@@ -142,14 +143,16 @@ export async function drainQueue(): Promise<DrainQueueResult> {
               : undefined
       }
       if (item.type === 'water') {
+        const keep =
+          !imageUrl &&
+          'existingImageUrl' in item &&
+          typeof item.existingImageUrl === 'string' &&
+          item.existingImageUrl.trim()
+            ? item.existingImageUrl.trim()
+            : undefined
         await saveWaterSupplyData(item.payload, {
           idempotencyKey: item.idempotencyKey,
-          imageUrl,
-        })
-      } else {
-        await saveSolarSupplyData(item.payload, {
-          idempotencyKey: item.idempotencyKey,
-          imageUrl,
+          imageUrl: imageUrl ?? keep,
         })
       }
       queue = queue.slice(1)

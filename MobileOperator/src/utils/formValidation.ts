@@ -87,3 +87,21 @@ export function isYearMonthNotAfterNow(year: number, month: number): boolean {
   if (year < cy) return true;
   return month <= cm;
 }
+
+/** Days in month (1–12), year full year. */
+export function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+/** Calendar date (local) not after end of today. */
+export function isYmdNotAfterNow(year: number, month: number, day: number): boolean {
+  const now = new Date();
+  const cy = now.getFullYear();
+  const cm = now.getMonth() + 1;
+  const cd = now.getDate();
+  if (year > cy) return false;
+  if (year < cy) return true;
+  if (month > cm) return false;
+  if (month < cm) return true;
+  return day <= cd;
+}

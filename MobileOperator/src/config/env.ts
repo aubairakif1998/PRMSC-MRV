@@ -1,4 +1,23 @@
 import Config from 'react-native-config';
 
-export const API_URL =
-  (Config.API_URL || '').trim() || 'http://localhost:5001/api';
+function normalizeApiUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+  return /\/api$/i.test(trimmed) ? trimmed : `${trimmed}/api`;
+}
+
+const ENV = String((Config as unknown as { ENV?: unknown }).ENV ?? '')
+  .trim()
+  .toUpperCase();
+
+const isProdEnv = ENV === 'PROD' || ENV === 'PRODUCTION';
+const isDevEnv = ENV === 'DEV' || ENV === 'DEVELOPMENT' || ENV === 'LOCAL';
+
+const PROD_API_ORIGIN = 'https://prmsc-mrv.vercel.app';
+const DEV_API_ORIGIN = 'http://127.0.0.1:5001';
+
+export const API_URL = isProdEnv
+  ? normalizeApiUrl(PROD_API_ORIGIN)
+  : isDevEnv
+    ? normalizeApiUrl(DEV_API_ORIGIN)
+    : normalizeApiUrl(String(Config.API_URL || '')) || normalizeApiUrl(DEV_API_ORIGIN);

@@ -60,6 +60,8 @@ type Props = {
   onChange: (iso: string) => void;
   placeholder?: string;
   allowEmpty?: boolean;
+  /** When true, the field is read-only (e.g. editing an existing server row). */
+  disabled?: boolean;
 };
 
 export function DatePickerField({
@@ -68,6 +70,7 @@ export function DatePickerField({
   onChange,
   placeholder = 'Tap to select',
   allowEmpty,
+  disabled,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [y, setY] = useState(() => todayParts().y);
@@ -96,6 +99,7 @@ export function DatePickerField({
   }, [y, m, maxY, maxM, maxD]);
 
   const openModal = useCallback(() => {
+    if (disabled) return;
     const p = value.trim() && isValidIsoDate(value) ? parseIsoParts(value.trim()) : null;
     const t = todayParts();
     if (p) {
@@ -123,7 +127,7 @@ export function DatePickerField({
       setD(t.d);
     }
     setOpen(true);
-  }, [value, maxY, maxM, maxD]);
+  }, [value, maxY, maxM, maxD, disabled]);
 
   const commit = useCallback(() => {
     let ny = y;
@@ -173,13 +177,16 @@ export function DatePickerField({
         accessibilityRole="button"
         accessibilityLabel={label}
         onPress={openModal}
-        className="border-input bg-background min-h-12 justify-center rounded-md border px-3 py-2 active:bg-muted/80"
+        disabled={disabled}
+        className={`border-input bg-background min-h-12 justify-center rounded-md border px-3 py-2 ${
+          disabled ? 'opacity-60' : 'active:bg-muted/80'
+        }`}
       >
         <Text className={`text-base ${displayText ? 'text-foreground' : 'text-muted-foreground'}`}>
           {displayText || placeholder}
         </Text>
       </Pressable>
-      {allowEmpty && displayText ? (
+      {allowEmpty && displayText && !disabled ? (
         <Pressable onPress={() => onChange('')} accessibilityRole="button">
           <Text className="text-sm text-primary">Clear</Text>
         </Pressable>
@@ -234,20 +241,20 @@ export function DatePickerField({
                   nestedScrollEnabled
                   showsVerticalScrollIndicator={Platform.OS === 'android'}
                   renderItem={({ item }) => {
-                    const disabled = y === maxY && item.month > maxM;
+                    const monthDisabled = y === maxY && item.month > maxM;
                     return (
                       <Pressable
-                        style={[styles.cell, item.month === m && styles.cellSelected, disabled && styles.cellDisabled]}
+                        style={[styles.cell, item.month === m && styles.cellSelected, monthDisabled && styles.cellDisabled]}
                         onPress={() => {
-                          if (!disabled) onSetMonth(item.month);
+                          if (!monthDisabled) onSetMonth(item.month);
                         }}
-                        disabled={disabled}
+                        disabled={monthDisabled}
                       >
                         <Text
                           style={[
                             styles.cellText,
                             item.month === m && styles.cellTextSelected,
-                            disabled && styles.cellTextDisabled,
+                            monthDisabled && styles.cellTextDisabled,
                           ]}
                         >
                           {item.name}

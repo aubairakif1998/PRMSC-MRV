@@ -1,7 +1,27 @@
 import axios, { type AxiosInstance } from "axios";
 
+function normalizeApiUrl(raw: string): string {
+  const trimmed = String(raw || "")
+    .trim()
+    .replace(/\/+$/, "");
+  if (!trimmed) return "";
+  return /\/api$/i.test(trimmed) ? trimmed : `${trimmed}/api`;
+}
+
+const ENV = String(import.meta.env.VITE_ENV || "")
+  .trim()
+  .toUpperCase();
+
+const DEFAULT_API_ORIGIN =
+  ENV === "PROD" ? "https://prmsc-mrv.vercel.app" : "http://127.0.0.1:5001";
+
+const API_URL =
+  normalizeApiUrl(import.meta.env.VITE_API_URL) ||
+  normalizeApiUrl(DEFAULT_API_ORIGIN) ||
+  "http://127.0.0.1:5001/api";
+
 export const apiClient: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://127.0.0.1:5000/api",
+  baseURL: API_URL,
   headers: {
     "Content-Type": "application/json",
   },

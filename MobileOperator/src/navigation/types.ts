@@ -1,26 +1,17 @@
 export type RootStackParamList = {
   Login: undefined;
   Home: undefined;
-  WaterSystemRegister: undefined;
-  SolarSystemRegister: undefined;
-  /** Monthly log — enter location on the form, or open from Quick log with systemId. */
+  /** Monthly log — opened from assignments picker with `systemId`. */
   WaterLog:
     | {
         draftId?: string;
         systemId?: string | number;
-        /** Shown in header when opened from Quick log */
+        /** Shown in header when opened from assignments */
         facilityLabel?: string;
       }
     | undefined;
-  SolarLog:
-    | {
-        draftId?: string;
-        systemId?: string | number;
-        facilityLabel?: string;
-      }
-    | undefined;
-  /** List registered facilities, then open log with location prefilled. */
-  PickFacility: { kind: 'water' | 'solar' };
+  /** Assigned water systems list (entry point to logging). */
+  Assignments: undefined;
   Drafts: undefined;
   MySubmissions: undefined;
   SubmissionDetail: { submissionId: string };

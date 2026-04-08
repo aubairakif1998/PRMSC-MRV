@@ -10,22 +10,22 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { getSubmissionDetail } from '../api/operator';
-import { getApiErrorMessage } from '../lib/api-error';
-import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
-import { Badge } from '../components/ui/badge';
-import { Button } from '../components/ui/button';
+import { getSubmissionDetail } from '../../api/operator';
+import { getApiErrorMessage } from '../../lib/api-error';
+import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '../components/ui/card';
-import { Separator } from '../components/ui/separator';
-import { SubmissionDetailLoading } from './screenSkeletons';
-import { Text } from '../components/ui/text';
-import type { RootStackParamList } from '../navigation/types';
+} from '../../components/ui/card';
+import { Separator } from '../../components/ui/separator';
+import { SubmissionDetailLoading } from '../shared/screenSkeletons';
+import { Text } from '../../components/ui/text';
+import type { RootStackParamList } from '../../navigation/types';
 import { AlertCircle } from 'lucide-react-native';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SubmissionDetail'>;
@@ -210,8 +210,6 @@ export function SubmissionDetailScreen({ route }: Props) {
     );
   }
 
-  const isWater = String(sub.submission_type) === 'water_system';
-
   return (
     // <KeyboardAvoidingView
     //   className="flex-1 bg-muted/30"
@@ -291,39 +289,20 @@ export function SubmissionDetailScreen({ route }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">
-            {isWater ? 'Water readings' : 'Solar readings'}
-          </CardTitle>
+          <CardTitle className="text-base">Water readings</CardTitle>
         </CardHeader>
         <Separator />
         <CardContent className="gap-4 pt-4">
-          {isWater ? (
-            <>
-              <DetailRow
-                label="Total water pumped (m³)"
-                value={fmt(record.total_water_pumped)}
-              />
-              <EvidenceImageBlock
-                label="Meter / evidence"
-                url={record.bulk_meter_image_url}
-              />
-            </>
-          ) : (
-            <>
-              <DetailRow
-                label="Energy consumed from grid (kWh)"
-                value={fmt(record.energy_consumed_from_grid)}
-              />
-              <DetailRow
-                label="Energy exported to grid (kWh)"
-                value={fmt(record.energy_exported_to_grid)}
-              />
-              <EvidenceImageBlock
-                label="Bill / evidence"
-                url={record.electricity_bill_image_url}
-              />
-            </>
-          )}
+          <>
+            <DetailRow
+              label="Total water pumped (m³)"
+              value={fmt(record.total_water_pumped)}
+            />
+            <EvidenceImageBlock
+              label="Meter / evidence"
+              url={record.bulk_meter_image_url}
+            />
+          </>
         </CardContent>
       </Card>
 
