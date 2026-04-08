@@ -8,6 +8,12 @@ def index():
     return jsonify({"status": "MRV API is running!", "version": "1.0.0"}), 200
 
 
+@main_bp.route("/api/health")
+def health():
+    """Liveness for Render, k8s, etc. No auth."""
+    return jsonify({"status": "ok"}), 200
+
+
 @main_bp.route("/api/hello")
 def hello():
     return jsonify({"message": "hello"}), 200

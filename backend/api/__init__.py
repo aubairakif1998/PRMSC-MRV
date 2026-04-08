@@ -1,1 +1,0 @@
-# Vercel Python serverless package

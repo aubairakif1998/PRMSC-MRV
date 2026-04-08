@@ -42,24 +42,23 @@ def _register_blueprints(app: Flask) -> None:
 
 
 def create_app():
-    # Vercel serverless: filesystem is read-only except /tmp — never use cwd for uploads/instance.
-    _on_vercel = os.environ.get("VERCEL") == "1"
+    # Render (and similar PaaS): ephemeral disk — use /tmp for uploads/instance.
+    _on_render = os.environ.get("RENDER", "").lower() in ("1", "true", "yes")
     flask_kw = {}
-    if _on_vercel:
+    if _on_render:
         flask_kw["instance_path"] = os.path.join(tempfile.gettempdir(), "mrv_instance")
 
     app = Flask(__name__, **flask_kw)
     env_name = os.getenv("FLASK_ENV", "development")
     app.config.from_object(config_by_name.get(env_name, config_by_name["development"]))
 
-    if _on_vercel:
+    if _on_render:
         app.config["UPLOAD_FOLDER"] = os.path.join(tempfile.gettempdir(), "mrv_uploads")
 
     db_url = os.environ.get("DATABASE_URL", "").strip()
     if not db_url:
         raise RuntimeError(
-            "DATABASE_URL is not set. Add it in Vercel: Project → Settings → "
-            "Environment Variables (Production / Preview as needed)."
+            "DATABASE_URL is not set. Set it in the host environment (e.g. Render → Environment)."
         )
     app.config["SQLALCHEMY_DATABASE_URI"] = build_database_uri(db_url)
 
