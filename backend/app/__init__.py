@@ -85,6 +85,8 @@ def create_app():
                     "Accept",
                     "Origin",
                     "X-Requested-With",
+                    "Idempotency-Key",
+                    "X-Idempotency-Key",
                 ],
                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                 "supports_credentials": True,

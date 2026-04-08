@@ -19,7 +19,8 @@
    | `DATABASE_URL` | Supabase **Settings → Database → URI** (direct). `postgres://` is normalized to `postgresql://` in code. |
    | `SECRET_KEY` | Long random string. |
    | `JWT_SECRET_KEY` | Different long random string. |
-   | `CORS_ORIGINS` | Comma-separated origins, e.g. `https://your-app.onrender.com,https://your-frontend.example.com` |
+   | `CORS_ORIGINS` | **Required for browser login:** comma-separated **exact** frontend origins (no trailing slash), e.g. `https://prmsc-mrv-1.onrender.com`. Must include your **Render static site** URL if the API is on another hostname. |
+   | `CORS_ALLOW_ONRENDER` | Optional: set `true` to allow any `https://*.onrender.com` origin (easier for many preview URLs; stricter teams rely on `CORS_ORIGINS` only). |
    | `SUPABASE_URL` | `https://<project>.supabase.co` |
    | `SUPABASE_STORAGE_BUCKET` | e.g. `mrv-public` |
    | `SUPABASE_S3_ENDPOINT` | Project **Storage → S3** endpoint |
@@ -42,6 +43,14 @@
 - **Root Directory:** `backend`
 - **Build Command:** `pip install -r requirements.txt`
 - **Start Command:** `gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120 wsgi:app`
+
+### CORS errors in the browser
+
+If you see **“blocked by CORS policy”** / **“No 'Access-Control-Allow-Origin' header”** on `POST /api/auth/login`, the frontend origin is not allowed. Add it to **`CORS_ORIGINS`** on the API service, redeploy the API, and hard-refresh the site. Example:
+
+`CORS_ORIGINS=https://prmsc-mrv-1.onrender.com`
+
+(Use your real static-site URL from the Render **Static Site** dashboard.)
 
 ## Frontend / mobile
 
