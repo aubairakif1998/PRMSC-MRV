@@ -29,6 +29,7 @@ import {
   normalizeTo24hWithSeconds,
 } from './AmPmTimePickerField'
 import { MonthlyLogFormLoading } from '../features/shared/screenSkeletons'
+import { LoadingOverlay } from './ui/loading-overlay'
 import {
   getLocalIsoDateString,
   isIsoDatePastOrToday,
@@ -111,19 +112,6 @@ function RequiredLabel({ children }: { children: string }) {
   )
 }
 
-function formatTimeForInput(raw: unknown): string {
-  if (raw == null || raw === '') return ''
-  const s = String(raw).trim()
-  if (!s) return ''
-  // "06:00:00" or full ISO — keep HH:MM for editing
-  const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/)
-  if (m) {
-    const hh = m[1].padStart(2, '0')
-    return `${hh}:${m[2]}`
-  }
-  return s
-}
-
 function isValidTimeOfDayInput(s: string): boolean {
   const t = s.trim()
   if (!t) return false
@@ -143,9 +131,6 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
   const [pumpStartTime, setPumpStartTime] = useState('')
   const [pumpEndTime, setPumpEndTime] = useState('')
   const [existingRecordId, setExistingRecordId] = useState<string | null>(null)
-  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null)
-
-  const periodLocked = Boolean(existingRecordId)
 
   const [picker, setPicker] = useState<PickerState | null>(null)
   const [asset, setAsset] = useState<EvidenceAsset | null>(null)
@@ -280,7 +265,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     }
   }, [draftId, systemId, navigation])
 
-  // One row per system per calendar day: if a server row exists for this date, edit mode.
+  // One row per system per calendar day: if a server row exists for this date, block submission (no edit).
   useEffect(() => {
     if (!systemId || draftId) return
     if (!tehsil || !village) return
@@ -310,27 +295,8 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
 
         if (match?.id) {
           setExistingRecordId(String(match.id))
-          const tw = match.total_water_pumped
-          if (tw != null && String(tw) !== '') {
-            setTotalWater(String(tw))
-          }
-          const pst = match.pump_start_time
-          const pet = match.pump_end_time
-          setPumpStartTime(
-            pst != null && String(pst).trim()
-              ? normalizeTo24hWithSeconds(formatTimeForInput(pst))
-              : '',
-          )
-          setPumpEndTime(
-            pet != null && String(pet).trim()
-              ? normalizeTo24hWithSeconds(formatTimeForInput(pet))
-              : '',
-          )
-          const img = match.bulk_meter_image_url
-          setExistingImageUrl(typeof img === 'string' && img.trim() ? img.trim() : null)
         } else {
           setExistingRecordId(null)
-          setExistingImageUrl(null)
           if (!draftId && systemId) {
             setTotalWater('')
             setPumpStartTime('')
@@ -339,7 +305,6 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
         }
       } catch {
         setExistingRecordId(null)
-        setExistingImageUrl(null)
       }
     })()
 
@@ -369,6 +334,13 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       )
       return false
     }
+    if (existingRecordId) {
+      Alert.alert(
+        'Already logged',
+        'A log already exists for this facility and date. Editing is not allowed in mobile. Please select a different date.',
+      )
+      return false
+    }
     if (!tehsil || !village) {
       Alert.alert('Validation', 'Please select tehsil and village.')
       return false
@@ -377,7 +349,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       Alert.alert('Validation', 'Please select settlement.')
       return false
     }
-    if (!asset?.uri && !existingImageUrl) {
+    if (!asset?.uri) {
       Alert.alert('Validation', 'Evidence image is mandatory. Please attach an image.')
       return false
     }
@@ -437,7 +409,6 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     type: 'water',
     payload: payload as WaterLogInput,
     evidence: asset,
-    ...(existingImageUrl ? { existingImageUrl } : {}),
     createdAt: new Date().toISOString(),
     idempotencyKey: createIdempotencyKey('water'),
   })
@@ -454,8 +425,6 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
           : typeof p === 'string' && p.trim()
             ? p.trim()
             : undefined
-    } else if (existingImageUrl) {
-      imageUrl = existingImageUrl
     }
     await saveWaterSupplyData(payload as WaterLogInput, { idempotencyKey, imageUrl })
   }
@@ -486,27 +455,34 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
         navigation.navigate('Home')
       }
     } catch (e: unknown) {
-      try {
-        await enqueue(queueItem)
-        if (activeDraftId) {
-          await deleteDraft(type, activeDraftId)
-          setActiveDraftId(null)
+      // Only queue when there is no connectivity. If we are online but got a server error
+      // (e.g. 400 validation), we should surface the error and keep the user on this screen.
+      const stillOnline = await isOnline().catch(() => false)
+      if (!stillOnline) {
+        try {
+          await enqueue(queueItem)
+          if (activeDraftId) {
+            await deleteDraft(type, activeDraftId)
+            setActiveDraftId(null)
+          }
+          const items = await getQueue()
+          setQueuedCount(items.length)
+          Alert.alert(
+            'Queued',
+            `${getApiErrorMessage(e, 'Request failed.')}\n\nNo internet. Submission queued and will sync later.`,
+          )
+          navigation.navigate('Home')
+        } catch {
+          Alert.alert(
+            'Critical error',
+            getApiErrorMessage(
+              e,
+              'Submission could not be sent or queued. Please retry before leaving this screen.',
+            ),
+          )
         }
-        const items = await getQueue()
-        setQueuedCount(items.length)
-        Alert.alert(
-          'Submit failed',
-          `${getApiErrorMessage(e, 'Request failed.')}\n\nSaved to queue. It will retry when online.`,
-        )
-        navigation.navigate('Home')
-      } catch {
-        Alert.alert(
-          'Critical error',
-          getApiErrorMessage(
-            e,
-            'Submission could not be sent or queued. Please retry before leaving this screen.',
-          ),
-        )
+      } else {
+        Alert.alert('Submit failed', getApiErrorMessage(e, 'Request failed. Please fix and retry.'))
       }
     } finally {
       setSaving(false)
@@ -519,6 +495,11 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
+      <LoadingOverlay
+        visible={saving}
+        title="Submitting log…"
+        message="Please wait. Do not close the app."
+      />
       <ScrollView
         style={styles.container}
         contentContainerStyle={[styles.content, styles.scrollContent]}
@@ -565,26 +546,22 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
           value={logDateIso}
           onChange={setLogDateIso}
           placeholder={getLocalIsoDateString()}
-          disabled={periodLocked}
         />
       </View>
 
       <SelectField
         label="Tehsil"
         value={tehsil}
-        disabled={periodLocked}
         onPress={() => setPicker({ title: 'Tehsil', key: 'tehsil', options: [...TEHSIL_OPTIONS] })}
       />
       <SelectField
         label="Village"
         value={village}
-        disabled={periodLocked}
         onPress={() => setPicker({ title: 'Village', key: 'village', options: villageOptions })}
       />
       <SelectField
         label="Settlement"
         value={settlement}
-        disabled={periodLocked}
         onPress={() => setPicker({ title: 'Settlement', key: 'settlement', options: settlementOptions })}
       />
 
@@ -631,7 +608,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       {existingRecordId ? (
         <View style={styles.facilityBadge}>
           <Text style={styles.facilityBadgeText}>
-            Existing log found for this date. You are editing it now.
+            A log already exists for this facility and date. Pick another date to create a new log.
           </Text>
         </View>
       ) : null}
@@ -639,7 +616,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       <View style={styles.field}>
         <RequiredLabel>Bulk meter evidence (photo)</RequiredLabel>
         <Text style={styles.helper}>
-          Upload a new photo, or keep the existing server image when editing.
+          Upload a photo of the bulk meter.
         </Text>
         <View style={styles.row}>
           <Pressable style={styles.actionBtn} onPress={openCamera}>
@@ -652,9 +629,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
         <Text style={styles.helper}>
           {asset?.fileName || asset?.uri
             ? `New: ${asset?.fileName ?? 'image'}`
-            : existingImageUrl
-              ? 'Using existing meter image on server.'
-              : 'No image selected'}
+            : 'No image selected'}
         </Text>
       </View>
 
