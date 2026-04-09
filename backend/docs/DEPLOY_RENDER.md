@@ -7,6 +7,7 @@
 - `render.yaml` at **repository root** — Blueprint with `rootDir: backend`.
 - `GET /api/health` — Render health checks (no auth).
 - `create_app()` uses `/tmp` for uploads/instance when `RENDER` is set (ephemeral disk).
+- `app/cors.py` — CORS allowlist from **`CORS_ORIGINS` env only** (see module docstring); production requires it set.
 
 ## One-time: Render service
 
