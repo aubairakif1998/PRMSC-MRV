@@ -1,5 +1,4 @@
 import os
-import re
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -16,46 +15,6 @@ def _load_env() -> None:
 
 
 _load_env()
-
-
-def _normalize_origin(origin: str) -> str:
-    """Strip whitespace and trailing slash (https://a.com/ vs https://a.com must match)."""
-    o = origin.strip()
-    if len(o) > 1 and o.endswith("/"):
-        return o.rstrip("/")
-    return o
-
-
-def build_cors_origins() -> list:
-    """
-    Comma-separated CORS_ORIGINS. When unset in development, allow common local dev URLs.
-
-    With credentials, the browser's Origin must match exactly. Add your Render static
-    URL explicitly, e.g. https://your-frontend-name.onrender.com
-
-    Optional: CORS_ALLOW_ONRENDER=true adds a regex so any https://*.onrender.com works
-    (convenient for preview deploys; turn off if you want only listed origins).
-    """
-    raw = os.environ.get("CORS_ORIGINS", "").strip()
-    if raw:
-        origins: list = [_normalize_origin(o) for o in raw.split(",") if o.strip()]
-    else:
-        origins = [
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-            "http://localhost:4200",
-            "http://127.0.0.1:4200",
-        ]
-    if os.environ.get("CORS_ALLOW_ONRENDER", "").lower() in ("1", "true", "yes"):
-        origins.append(re.compile(r"^https://[\w-]+\.onrender\.com$"))
-    return origins
-
-
-def _parse_cors_origins() -> list:
-    """Backward-compatible name; delegates to build_cors_origins."""
-    return build_cors_origins()
 
 
 class Config:
@@ -85,7 +44,8 @@ class Config:
         f"{SUPABASE_URL}/storage/v1/object/public" if SUPABASE_URL else "",
     )
 
-    CORS_ORIGINS = build_cors_origins()
+    # Populated in create_app via app.cors.resolve_cors_allowlist (from CORS_ORIGINS env).
+    CORS_ORIGINS: list[str] = []
 
     # File Uploads
     UPLOAD_FOLDER = os.path.join(os.getcwd(), "app", "uploads")

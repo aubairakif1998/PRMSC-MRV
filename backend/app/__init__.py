@@ -2,9 +2,9 @@ import os
 import tempfile
 
 from flask import Flask, send_from_directory
-from flask_cors import CORS
 
 from .config import config_by_name
+from .cors import init_cors, resolve_cors_allowlist
 from .db.supabase_client import build_database_uri, mask_database_uri
 from .extensions import db, jwt, migrate
 
@@ -51,6 +51,7 @@ def create_app():
     app = Flask(__name__, **flask_kw)
     env_name = os.getenv("FLASK_ENV", "development")
     app.config.from_object(config_by_name.get(env_name, config_by_name["development"]))
+    app.config["CORS_ORIGINS"] = resolve_cors_allowlist(flask_env=env_name)
 
     if _on_render:
         app.config["UPLOAD_FOLDER"] = os.path.join(tempfile.gettempdir(), "mrv_uploads")
@@ -73,27 +74,10 @@ def create_app():
     _register_extensions(app)
     _register_blueprints(app)
 
-    # Explicit origins (not "*"): browsers disallow credentials + wildcard ACAO.
-    CORS(
-        app,
-        resources={
-            r"/api/*": {
-                "origins": app.config["CORS_ORIGINS"],
-                "allow_headers": [
-                    "Content-Type",
-                    "Authorization",
-                    "Accept",
-                    "Origin",
-                    "X-Requested-With",
-                    "Idempotency-Key",
-                    "X-Idempotency-Key",
-                ],
-                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-                "supports_credentials": True,
-            }
-        },
-        supports_credentials=True,
-        automatic_options=True,
+    init_cors(app)
+    app.logger.info(
+        "CORS allowlist: %d origin(s) from CORS_ORIGINS",
+        len(app.config["CORS_ORIGINS"]),
     )
 
     @app.route("/api/uploads/<path:filename>")

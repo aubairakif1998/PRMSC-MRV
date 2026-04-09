@@ -19,8 +19,7 @@
    | `DATABASE_URL` | Supabase **Settings → Database → URI** (direct). `postgres://` is normalized to `postgresql://` in code. |
    | `SECRET_KEY` | Long random string. |
    | `JWT_SECRET_KEY` | Different long random string. |
-   | `CORS_ORIGINS` | **Required for browser login:** comma-separated **exact** frontend origins (no trailing slash), e.g. `https://prmsc-mrv-1.onrender.com`. Must include your **Render static site** URL if the API is on another hostname. |
-   | `CORS_ALLOW_ONRENDER` | Optional: set `true` to allow any `https://*.onrender.com` origin (easier for many preview URLs; stricter teams rely on `CORS_ORIGINS` only). |
+   | `CORS_ORIGINS` | **Required in production:** comma-separated browser origins (no trailing slash). List every frontend host (e.g. `https://your-static.onrender.com`). See `app/cors.py`. |
    | `SUPABASE_URL` | `https://<project>.supabase.co` |
    | `SUPABASE_STORAGE_BUCKET` | e.g. `mrv-public` |
    | `SUPABASE_S3_ENDPOINT` | Project **Storage → S3** endpoint |
@@ -46,11 +45,9 @@
 
 ### CORS errors in the browser
 
-If you see **“blocked by CORS policy”** / **“No 'Access-Control-Allow-Origin' header”** on `POST /api/auth/login`, the frontend origin is not allowed. Add it to **`CORS_ORIGINS`** on the API service, redeploy the API, and hard-refresh the site. Example:
+Allowed origins are **only** those in **`CORS_ORIGINS`** (env / `.env.production`). If the browser’s `Origin` is missing from that list, add it on the API service, redeploy, and hard-refresh. Example:
 
-`CORS_ORIGINS=https://prmsc-mrv-1.onrender.com`
-
-(Use your real static-site URL from the Render **Static Site** dashboard.)
+`CORS_ORIGINS=https://your-static.onrender.com,http://localhost:5173`
 
 ## Frontend / mobile
 
