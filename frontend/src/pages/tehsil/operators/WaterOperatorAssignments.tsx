@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, RefreshCw, Users } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import {
+  Check,
+  Droplets,
+  Info,
+  Loader2,
+  PencilLine,
+  RefreshCw,
+  ShieldOff,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { toast } from "sonner";
 
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "../../../components/ui/alert";
+import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
@@ -29,7 +36,15 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "../../../components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/ui/select";
 import { ScrollArea } from "../../../components/ui/scroll-area";
+import { Skeleton } from "../../../components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -38,6 +53,8 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
+import { tehsilRoutes } from "../../../constants/routes";
+import { cn } from "../../../lib/utils";
 import { getApiErrorMessage } from "../../../lib/api-error";
 import {
   getWaterOperatorAssignments,
@@ -62,13 +79,19 @@ type OperatorRow = {
 
 type AssignmentsPayload = {
   operators: OperatorRow[];
+  /** All tubewell operators you may assign in your scope (includes operators with no local links yet). */
+  eligible_operators?: OperatorRow[];
   water_systems_catalog: WaterSystemRef[];
 };
 
+type AssignmentDialogFlow = "edit" | "add";
+
 export default function WaterOperatorAssignments() {
+  const navigate = useNavigate();
   const [data, setData] = useState<AssignmentsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogFlow, setDialogFlow] = useState<AssignmentDialogFlow>("edit");
   const [editing, setEditing] = useState<OperatorRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   /** Empty string = show all tehsils in the catalog (still only your tehsils from the server). */
@@ -79,11 +102,13 @@ export default function WaterOperatorAssignments() {
     try {
       setLoading(true);
       const raw = await getWaterOperatorAssignments();
-      setData(raw as AssignmentsPayload);
+      const p = raw as AssignmentsPayload;
+      if (!p.eligible_operators?.length && p.operators?.length) {
+        p.eligible_operators = p.operators;
+      }
+      setData(p);
     } catch (e: unknown) {
-      toast.error(
-        getApiErrorMessage(e, "Could not load operator assignments"),
-      );
+      toast.error(getApiErrorMessage(e, "Could not load operator assignments"));
       setData(null);
     } finally {
       setLoading(false);
@@ -110,6 +135,13 @@ export default function WaterOperatorAssignments() {
     [catalogByTehsil],
   );
 
+  const eligibleOperatorList = useMemo(() => {
+    const list = data?.eligible_operators ?? data?.operators ?? [];
+    return [...list].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+    );
+  }, [data?.eligible_operators, data?.operators]);
+
   const catalogByTehsilFiltered = useMemo(() => {
     if (!dialogTehsilFilter) return catalogByTehsil;
     return catalogByTehsil.filter(([t]) => t === dialogTehsilFilter);
@@ -124,28 +156,31 @@ export default function WaterOperatorAssignments() {
   );
 
   const openEdit = (op: OperatorRow) => {
+    setDialogFlow("edit");
     setEditing(op);
     setSelectedIds(new Set(op.water_systems.map((w) => w.id)));
     setDialogTehsilFilter("");
     setDialogOpen(true);
   };
 
-  const addAllSystemsInTehsil = (tehsilKey: string) => {
-    const ids = idsInTehsil(tehsilKey);
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      for (const id of ids) next.add(id);
-      return next;
-    });
+  const openAddAssignment = () => {
+    setDialogFlow("add");
+    setEditing(null);
+    setSelectedIds(new Set());
+    setDialogTehsilFilter("");
+    setDialogOpen(true);
   };
 
-  const removeAllSystemsInTehsilFromSelection = (tehsilKey: string) => {
-    const remove = new Set(idsInTehsil(tehsilKey));
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      for (const id of remove) next.delete(id);
-      return next;
-    });
+  const onPickOperatorForAdd = (operatorId: string) => {
+    if (!operatorId.trim()) {
+      setEditing(null);
+      setSelectedIds(new Set());
+      return;
+    }
+    const op = eligibleOperatorList.find((o) => o.id === operatorId);
+    if (!op) return;
+    setEditing(op);
+    setSelectedIds(new Set(op.water_systems.map((w) => w.id)));
   };
 
   const toggleSystem = (id: string) => {
@@ -156,24 +191,6 @@ export default function WaterOperatorAssignments() {
       return next;
     });
   };
-
-  const selectAllCatalog = () => {
-    const all = data?.water_systems_catalog.map((w) => w.id) ?? [];
-    setSelectedIds(new Set(all));
-  };
-
-  const selectAllVisibleInFilter = () => {
-    const ids = catalogByTehsilFiltered.flatMap(([, systems]) =>
-      systems.map((s) => s.id),
-    );
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      for (const id of ids) next.add(id);
-      return next;
-    });
-  };
-
-  const clearSelection = () => setSelectedIds(new Set());
 
   const saveAssignments = async () => {
     if (!editing) return;
@@ -210,109 +227,198 @@ export default function WaterOperatorAssignments() {
 
   const catalogLen = data?.water_systems_catalog.length ?? 0;
   const selectedCount = selectedIds.size;
+  const operatorCount = data?.operators.length ?? 0;
+  const tehsilCount = tehsilFilterOptions.length;
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 p-4 md:p-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="rounded-xl bg-primary p-2.5 text-primary-foreground shadow">
-            <Users className="size-6" />
+    <div className="mx-auto w-full max-w-6xl space-y-8 p-4 pb-12 md:p-8">
+      <header className="flex flex-col gap-6 border-b border-border/80 pb-8 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex gap-4">
+          <div
+            className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm ring-1 ring-primary/15"
+            aria-hidden
+          >
+            <Users className="size-7" />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <div className="min-w-0 space-y-2">
+            <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
               Tubewell operator assignments
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              See which operators are linked to which water systems in your tehsil.
-              Changes only apply to systems you manage — other tehsils are not
-              affected.
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              Link tubewell operators to water systems you manage. Assignments
+              are limited to your tehsil scope; other districts are never
+              changed.
             </p>
           </div>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="shrink-0 gap-2"
-          onClick={() => void load()}
-          disabled={loading}
-        >
-          {loading ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <RefreshCw className="size-4" />
-          )}
-          Refresh
-        </Button>
-      </div>
+        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <Button
+            type="button"
+            variant="default"
+            size="default"
+            className="gap-2 shadow-sm"
+            onClick={openAddAssignment}
+            disabled={loading || catalogLen === 0}
+            title={
+              catalogLen === 0
+                ? "Register water systems in your tehsil first"
+                : undefined
+            }
+          >
+            <UserPlus className="size-4" />
+            Add assignment
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="default"
+            className="gap-2 shadow-sm"
+            onClick={() => void load()}
+            disabled={loading}
+          >
+            {loading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )}
+            Refresh data
+          </Button>
+        </div>
+      </header>
 
-      <Alert variant="info">
-        <AlertTitle>How this works</AlertTitle>
+      {data ? (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Card size="sm" className="shadow-sm">
+            <CardHeader className="pb-2">
+              <CardDescription>Operators (in scope)</CardDescription>
+              <CardTitle className="font-heading text-3xl font-semibold tabular-nums text-foreground">
+                {operatorCount}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+          <Card size="sm" className="shadow-sm">
+            <CardHeader className="pb-2">
+              <CardDescription>Water systems you can assign</CardDescription>
+              <CardTitle className="font-heading text-3xl font-semibold tabular-nums text-foreground">
+                {catalogLen}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+          <Card size="sm" className="shadow-sm">
+            <CardHeader className="pb-2">
+              <CardDescription>Tehsils in your catalog</CardDescription>
+              <CardTitle className="font-heading text-3xl font-semibold tabular-nums text-foreground">
+                {tehsilCount}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
+      ) : null}
+
+      <Alert variant="info" className="border-primary/20 py-3 shadow-sm">
+        <Info className="size-4 shrink-0" aria-hidden />
         <AlertDescription className="text-sm leading-relaxed">
-          Use <strong>Edit assignments</strong> to tick several water systems at
-          once (only systems in <strong>your</strong> tehsil appear — the server
-          enforces this). Filter by tehsil and use{" "}
-          <strong>Add all in this tehsil</strong> to assign many sites in one
-          tehsil quickly. Use <strong>Revoke all (my tehsil)</strong> to remove
-          every link in your scope at once. New operator accounts:{" "}
-          <strong>Onboard Operator</strong>.
+          Use <strong className="text-foreground">Add assignment</strong> to link
+          water systems to a tubewell operator (including one with no sites in
+          your tehsil yet). Open{" "}
+          <strong className="text-foreground">Assign / edit</strong> on a row to
+          change an existing link. Only your tehsil&apos;s systems appear. New
+          accounts: <strong className="text-foreground">Onboard Operator</strong>
+          .
         </AlertDescription>
       </Alert>
 
       {loading && !data ? (
-        <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-4 py-8 text-muted-foreground">
-          <Loader2 className="size-5 animate-spin" />
-          <span>Loading assignments…</span>
+        <div className="space-y-3">
+          <Skeleton className="h-48 w-full rounded-xl" />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Skeleton className="h-24 rounded-xl" />
+            <Skeleton className="h-24 rounded-xl" />
+            <Skeleton className="h-24 rounded-xl" />
+          </div>
         </div>
       ) : null}
 
       {data ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl">Operators and water systems</CardTitle>
-            <CardDescription>
+        <Card className="overflow-hidden shadow-sm">
+          <CardHeader className="border-b border-border/80 bg-muted/20 pb-4">
+            <CardTitle className="font-heading text-lg sm:text-xl">
+              Assignment overview
+            </CardTitle>
+            <CardDescription className="text-base">
               {catalogLen === 0
                 ? "No water systems are registered in your tehsil yet."
-                : `${data.operators.length} operator(s) with assignments · ${catalogLen} water system(s) you can assign.`}
+                : `${operatorCount} operator${operatorCount === 1 ? "" : "s"} linked · ${catalogLen} system${catalogLen === 1 ? "" : "s"} available to assign.`}
             </CardDescription>
           </CardHeader>
-          <CardContent className="overflow-x-auto p-0 sm:p-6">
+          <CardContent className="overflow-x-auto px-0 pb-0 pt-0 sm:px-0">
             {catalogLen === 0 ? (
-              <p className="px-6 py-8 text-center text-sm text-muted-foreground sm:px-0">
-                Register water systems first, then onboard operators or edit
-                assignments here.
-              </p>
+              <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
+                <div className="flex size-12 items-center justify-center rounded-full bg-muted">
+                  <Droplets className="size-6 text-muted-foreground" />
+                </div>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  Register water systems first, then onboard operators or return
+                  here to manage assignments.
+                </p>
+              </div>
             ) : data.operators.length === 0 ? (
-              <p className="px-6 py-8 text-center text-sm text-muted-foreground sm:px-0">
-                No tubewell operators have water systems assigned in your tehsil
-                yet. Use Onboard Operator to create an account, or refresh after
-                linking systems elsewhere.
-              </p>
+              <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
+                <div className="flex size-12 items-center justify-center rounded-full bg-muted">
+                  <Users className="size-6 text-muted-foreground" />
+                </div>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  No operators are linked to your water systems yet. Use{" "}
+                  <span className="font-medium text-foreground">
+                    Onboard Operator
+                  </span>{" "}
+                  to create an account, then assign systems here.
+                </p>
+              </div>
             ) : (
               <Table>
                 <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="min-w-[140px]">Operator</TableHead>
-                    <TableHead className="min-w-[180px]">Email</TableHead>
-                    <TableHead>Assigned water systems</TableHead>
-                    <TableHead className="w-[200px] text-right">
+                  <TableRow className="border-border/80 hover:bg-transparent">
+                    <TableHead className="min-w-[140px] pl-6 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Operator
+                    </TableHead>
+                    <TableHead className="min-w-[200px] text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Email
+                    </TableHead>
+                    <TableHead className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Assigned water systems
+                    </TableHead>
+                    <TableHead className="w-[220px] pr-6 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       Actions
                     </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {data.operators.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell className="font-medium">{row.name}</TableCell>
-                      <TableCell className="text-muted-foreground">
+                    <TableRow
+                      key={row.id}
+                      className="border-border/60 transition-colors hover:bg-muted/40"
+                    >
+                      <TableCell className="pl-6 align-top">
+                        <div className="font-medium text-foreground">
+                          {row.name}
+                        </div>
+                        {row.phone ? (
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {row.phone}
+                          </div>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="align-top text-sm text-muted-foreground">
                         {row.email}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
+                      <TableCell className="align-top">
+                        <div className="flex flex-wrap gap-1.5">
                           {row.water_systems.map((ws) => (
                             <Badge
                               key={ws.id}
-                              variant="secondary"
-                              className="max-w-[240px] truncate font-normal"
+                              variant="outline"
+                              className="max-w-[220px] truncate border-border/80 bg-card font-normal text-foreground"
                               title={`${ws.unique_identifier} — ${ws.village}`}
                             >
                               {ws.village}
@@ -320,23 +426,27 @@ export default function WaterOperatorAssignments() {
                           ))}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="pr-6 text-right align-top">
                         <div className="flex flex-wrap justify-end gap-2">
                           <Button
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="default"
+                            className="gap-1.5 shadow-sm"
                             onClick={() => openEdit(row)}
                           >
-                            Assign / edit systems
+                            <PencilLine className="size-3.5" />
+                            Assign / edit
                           </Button>
                           <Button
                             type="button"
                             size="sm"
-                            variant="destructive"
+                            variant="outline"
+                            className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
                             disabled={saving}
                             onClick={() => void revokeAllForOperator(row)}
                           >
+                            <ShieldOff className="size-3.5" />
                             Revoke all
                           </Button>
                         </div>
@@ -357,39 +467,113 @@ export default function WaterOperatorAssignments() {
           if (!open) {
             setEditing(null);
             setDialogTehsilFilter("");
+            setDialogFlow("edit");
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] gap-0 overflow-hidden p-0 sm:max-w-lg">
-          <DialogHeader className="gap-2 border-b px-4 py-4">
-            <DialogTitle>Assign multiple water systems</DialogTitle>
-            <DialogDescription>
-              {editing ? (
+        <DialogContent className="flex max-h-[92vh] flex-col gap-0 overflow-hidden border-border/80 p-0 shadow-lg sm:max-w-2xl">
+          <DialogHeader className="shrink-0 space-y-3 border-b border-border/80 bg-muted/30 px-6 py-5">
+            <DialogTitle className="font-heading text-lg sm:text-xl">
+              {dialogFlow === "add" ? "New assignment" : "Assign water systems"}
+            </DialogTitle>
+            <DialogDescription className="text-sm leading-relaxed">
+              {dialogFlow === "add" && !editing ? (
                 <>
-                  Tick any combination of systems for{" "}
-                  <strong>{editing.name}</strong>. The list only includes water
-                  systems registered under <strong>your</strong> tehsil(s).{" "}
-                  <span className="text-muted-foreground">
-                    {selectedCount} selected.
+                  Choose a tubewell operator, then select the water systems they
+                  should log for in your tehsil.
+                </>
+              ) : editing ? (
+                <>
+                  Select systems for{" "}
+                  <span className="font-medium text-foreground">
+                    {editing.name}
+                  </span>
+                  . Only facilities under your tehsil(s) are listed.{" "}
+                  <span className="tabular-nums text-muted-foreground">
+                    {selectedCount} selected
                   </span>
                 </>
               ) : null}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 px-4 py-3">
+
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+            {dialogFlow === "add" ? (
+              <div className="space-y-2">
+                <Label
+                  htmlFor="assign-pick-operator"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Tubewell operator
+                </Label>
+                <Select
+                  value={editing?.id ?? "__none__"}
+                  onValueChange={(v) =>
+                    onPickOperatorForAdd(
+                      v == null || v === "__none__" ? "" : v,
+                    )
+                  }
+                  disabled={eligibleOperatorList.length === 0}
+                >
+                  <SelectTrigger
+                    id="assign-pick-operator"
+                    className="h-11 w-full min-w-0 text-base"
+                  >
+                    <SelectValue placeholder="Select an operator…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select an operator…</SelectItem>
+                    {eligibleOperatorList.map((op) => (
+                      <SelectItem key={op.id} value={op.id}>
+                        {op.name} — {op.email}
+                        {op.water_systems.length === 0
+                          ? " (no sites in your tehsil yet)"
+                          : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {eligibleOperatorList.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-border/80 bg-muted/30 px-4 py-3 text-sm leading-relaxed text-muted-foreground">
+                    There are no tubewell operator accounts to assign yet. Create
+                    one under{" "}
+                    <button
+                      type="button"
+                      className="font-medium text-primary underline underline-offset-2"
+                      onClick={() => navigate(tehsilRoutes.onboardOperator)}
+                    >
+                      Onboard Operator
+                    </button>
+                    , then use Refresh data and try again.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div
+              className={cn(
+                "space-y-4",
+                dialogFlow === "add" && !editing && eligibleOperatorList.length > 0
+                  ? "pointer-events-none opacity-45"
+                  : "",
+              )}
+            >
             {tehsilFilterOptions.length > 1 ? (
               <div className="space-y-2">
-                <Label htmlFor="assign-tehsil-filter" className="text-xs">
-                  Filter list by tehsil
+                <Label
+                  htmlFor="assign-tehsil-filter"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Filter by tehsil
                 </Label>
                 <NativeSelect
                   id="assign-tehsil-filter"
-                  className="w-full min-w-0"
+                  className="h-11 w-full min-w-0 text-base"
                   value={dialogTehsilFilter}
                   onChange={(e) => setDialogTehsilFilter(e.target.value)}
                 >
                   <NativeSelectOption value="">
-                    All my tehsils ({catalogLen} systems)
+                    All tehsils ({catalogLen} systems)
                   </NativeSelectOption>
                   {tehsilFilterOptions.map((t) => {
                     const n = idsInTehsil(t).length;
@@ -402,173 +586,92 @@ export default function WaterOperatorAssignments() {
                 </NativeSelect>
               </div>
             ) : null}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={selectAllCatalog}
-                disabled={!catalogLen}
-              >
-                Select all (all tehsils)
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={selectAllVisibleInFilter}
-                disabled={
-                  !catalogLen ||
-                  (dialogTehsilFilter
-                    ? idsInTehsil(dialogTehsilFilter).length === 0
-                    : catalogLen === 0)
-                }
-                title={
-                  dialogTehsilFilter
-                    ? `Add every system under ${dialogTehsilFilter} to the selection`
-                    : "Add every visible system to the selection"
-                }
-              >
-                {dialogTehsilFilter
-                  ? `Add all visible (${catalogByTehsilFiltered.reduce((acc, [, s]) => acc + s.length, 0)})`
-                  : "Add all visible"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={clearSelection}
-                disabled={selectedCount === 0}
-              >
-                Clear selection
-              </Button>
-            </div>
-            {dialogTehsilFilter ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => addAllSystemsInTehsil(dialogTehsilFilter)}
-                >
-                  Add all systems in this tehsil
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    removeAllSystemsInTehsilFromSelection(dialogTehsilFilter)
-                  }
-                >
-                  Remove this tehsil from selection
-                </Button>
-              </div>
-            ) : tehsilFilterOptions.length === 1 ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() =>
-                    addAllSystemsInTehsil(tehsilFilterOptions[0] ?? "")
-                  }
-                  disabled={!tehsilFilterOptions[0]}
-                >
-                  Add all {idsInTehsil(tehsilFilterOptions[0] ?? "").length}{" "}
-                  systems in your tehsil
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    removeAllSystemsInTehsilFromSelection(
-                      tehsilFilterOptions[0] ?? "",
-                    )
-                  }
-                  disabled={!tehsilFilterOptions[0]}
-                >
-                  Remove your tehsil from selection
-                </Button>
-              </div>
-            ) : tehsilFilterOptions.length > 1 ? (
-              <div className="flex flex-wrap gap-2 border-t border-border pt-2">
-                <span className="w-full text-xs text-muted-foreground">
-                  Or pick a tehsil above, then add every system in that tehsil in
-                  one step.
-                </span>
-              </div>
-            ) : null}
-            <ScrollArea className="h-[min(50vh,360px)] rounded-lg border bg-muted/20 p-3">
-              {catalogByTehsil.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No systems in catalog.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {catalogByTehsilFiltered.map(([tehsil, systems]) => (
-                    <div key={tehsil}>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {tehsil}
-                      </p>
-                      <ul className="space-y-2">
-                        {systems.map((s) => {
-                          const checked = selectedIds.has(s.id);
-                          return (
-                            <li
-                              key={s.id}
-                              className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2"
-                            >
-                              <Checkbox
-                                id={`ws-${s.id}`}
-                                checked={checked}
-                                onCheckedChange={() => toggleSystem(s.id)}
-                              />
-                              <Label
-                                htmlFor={`ws-${s.id}`}
-                                className="cursor-pointer text-sm leading-snug font-normal"
+
+            <ScrollArea className="h-[min(52vh,400px)] rounded-xl border border-border/80 bg-card shadow-sm">
+              <div className="p-3">
+                {catalogByTehsil.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    No systems in catalog.
+                  </p>
+                ) : (
+                  <div className="space-y-5">
+                    {catalogByTehsilFiltered.map(([tehsil, systems]) => (
+                      <div key={tehsil}>
+                        <p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          {tehsil}
+                        </p>
+                        <ul className="space-y-2">
+                          {systems.map((s) => {
+                            const checked = selectedIds.has(s.id);
+                            return (
+                              <li
+                                key={s.id}
+                                className={cn(
+                                  "flex items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+                                  checked
+                                    ? "border-primary/35 bg-primary/5"
+                                    : "border-border/60 bg-background hover:bg-muted/50",
+                                )}
                               >
-                                <span className="font-medium text-foreground">
-                                  {s.village}
-                                </span>
-                                {s.settlement ? (
-                                  <span className="text-muted-foreground">
-                                    {" "}
-                                    · {s.settlement}
+                                <Checkbox
+                                  id={`ws-${s.id}`}
+                                  checked={checked}
+                                  onCheckedChange={() => toggleSystem(s.id)}
+                                  className="mt-0.5"
+                                />
+                                <Label
+                                  htmlFor={`ws-${s.id}`}
+                                  className="min-w-0 flex-1 cursor-pointer text-sm leading-snug font-normal"
+                                >
+                                  <span className="font-medium text-foreground">
+                                    {s.village}
                                   </span>
-                                ) : null}
-                                <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
-                                  {s.unique_identifier}
-                                </span>
-                              </Label>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
+                                  {s.settlement ? (
+                                    <span className="text-muted-foreground">
+                                      {" "}
+                                      · {s.settlement}
+                                    </span>
+                                  ) : null}
+                                  <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
+                                    {s.unique_identifier}
+                                  </span>
+                                </Label>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </ScrollArea>
+            </div>
           </div>
-          <div className="flex flex-col-reverse gap-2 border-t border-border px-4 py-4 sm:flex-row sm:justify-between">
+
+          <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-border/80 bg-muted/30 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
             <Button
               type="button"
               variant="ghost"
+              className="text-muted-foreground"
               onClick={() => setDialogOpen(false)}
             >
               Cancel
             </Button>
             <Button
               type="button"
+              size="lg"
+              className="min-w-[160px] gap-2 shadow-sm"
               onClick={() => void saveAssignments()}
               disabled={saving || !editing}
             >
               {saving ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
-                "Save assignments"
+                <>
+                  Save changes
+                  <Check className="size-4 opacity-90" />
+                </>
               )}
             </Button>
           </div>

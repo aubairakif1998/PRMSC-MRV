@@ -63,7 +63,11 @@ class UserService:
         """Operators with at least one assignment in the actor's manageable scope, plus catalog."""
         manageable = manageable_water_system_ids_for_assignment(actor)
         if not manageable:
-            return {"operators": [], "water_systems_catalog": []}
+            return {
+                "operators": [],
+                "eligible_operators": [],
+                "water_systems_catalog": [],
+            }
 
         operator_ids = (
             db.session.query(UserWaterSystem.user_id)
@@ -114,6 +118,58 @@ class UserService:
             )
         operators_out.sort(key=lambda row: row["name"].lower())
 
+        by_id: dict[str, dict] = {row["id"]: row for row in operators_out}
+
+        all_uids_with_any_link = {
+            r[0]
+            for r in db.session.query(UserWaterSystem.user_id).distinct().all()
+        }
+        uids_external_only = all_uids_with_any_link - set(uid_list)
+        for uid in uids_external_only:
+            u = User.query.get(uid)
+            if not u or user_role_code(u) != USER:
+                continue
+            sid = str(u.id)
+            if sid in by_id:
+                continue
+            by_id[sid] = {
+                "id": sid,
+                "name": u.name,
+                "email": u.email,
+                "phone": u.phone or None,
+                "water_systems": [],
+            }
+
+        # Tubewell operators with no user_water_systems rows yet (can receive first assignment).
+        role_user = Role.query.filter_by(code=USER).first()
+        if role_user:
+            linked_subq = db.session.query(UserWaterSystem.user_id).distinct()
+            unassigned = (
+                User.query.filter(
+                    User.role_id == role_user.id,
+                    ~User.id.in_(linked_subq),
+                )
+                .order_by(User.created_at.desc())
+                .limit(200)
+                .all()
+            )
+            for u in unassigned:
+                sid = str(u.id)
+                if sid in by_id:
+                    continue
+                by_id[sid] = {
+                    "id": sid,
+                    "name": u.name,
+                    "email": u.email,
+                    "phone": u.phone or None,
+                    "water_systems": [],
+                }
+
+        eligible_operators = sorted(
+            by_id.values(),
+            key=lambda row: row["name"].lower(),
+        )
+
         catalog = (
             WaterSystem.query.filter(WaterSystem.id.in_(manageable))
             .order_by(
@@ -136,6 +192,7 @@ class UserService:
 
         return {
             "operators": operators_out,
+            "eligible_operators": eligible_operators,
             "water_systems_catalog": water_systems_catalog,
         }
 
