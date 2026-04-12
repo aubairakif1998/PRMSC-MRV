@@ -10,8 +10,10 @@ from app.models.models import (
     SolarEnergyLoggingMonthly,
     Notification,
     User,
+    UserWaterSystem,
     Submission,
     VerificationLog,
+    SUBMISSION_STATUS_DRAFTED,
     SUBMISSION_STATUS_SUBMITTED,
     SUBMISSION_STATUS_ACCEPTED,
     SUBMISSION_STATUS_REJECTED,
@@ -64,6 +66,161 @@ from app.services.tehsil_access import (
 from datetime import date, datetime
 
 tehsil_manager_bp = Blueprint("tehsil_manager", __name__)
+
+
+@tehsil_manager_bp.route("/logging-compliance", methods=["GET"])
+@jwt_required()
+@min_role_required("ADMIN")
+def get_logging_compliance():
+    """
+    Tehsil manager: per water system, whether a tubewell daily log exists for `water_date`
+    and its workflow status; per solar site, whether a monthly grid log exists for `solar_year`/`solar_month`.
+    Scoped to the user's tehsils (or all systems for SUPER_ADMIN+).
+    """
+    user = UserService.get_user_by_id(get_jwt_identity())
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    rk = user_rank(user)
+    ts = list(user_assigned_tehsils(user))
+
+    water_date_s = request.args.get("water_date")
+    solar_year = request.args.get("solar_year", type=int)
+    solar_month = request.args.get("solar_month", type=int)
+
+    today = date.today()
+    try:
+        if water_date_s:
+            water_day = datetime.strptime(water_date_s, "%Y-%m-%d").date()
+        else:
+            water_day = today
+    except ValueError:
+        return jsonify({"message": "Invalid water_date; use YYYY-MM-DD"}), 400
+
+    if solar_year is None:
+        solar_year = today.year
+    if solar_month is None:
+        solar_month = today.month
+    if solar_month < 1 or solar_month > 12:
+        return jsonify({"message": "solar_month must be 1–12"}), 400
+
+    if rk >= ROLE_RANK[SUPER_ADMIN]:
+        water_q = WaterSystem.query
+        solar_q = SolarSystem.query
+    elif ts:
+        water_q = WaterSystem.query.filter(WaterSystem.tehsil.in_(ts))
+        solar_q = SolarSystem.query.filter(SolarSystem.tehsil.in_(ts))
+    else:
+        return jsonify(
+            {
+                "water_date": water_day.isoformat(),
+                "solar_year": solar_year,
+                "solar_month": solar_month,
+                "water_systems": [],
+                "solar_systems": [],
+            }
+        ), 200
+
+    water_systems = water_q.order_by(
+        WaterSystem.tehsil, WaterSystem.village, WaterSystem.unique_identifier
+    ).all()
+    solar_systems = solar_q.order_by(
+        SolarSystem.tehsil, SolarSystem.village, SolarSystem.unique_identifier
+    ).all()
+
+    ws_ids = [ws.id for ws in water_systems]
+    operators_by_water_id: dict[str, list[dict]] = {str(wid): [] for wid in ws_ids}
+    if ws_ids:
+        op_rows = (
+            db.session.query(UserWaterSystem, User)
+            .join(User, UserWaterSystem.user_id == User.id)
+            .filter(UserWaterSystem.water_system_id.in_(ws_ids))
+            .order_by(User.name.asc())
+            .all()
+        )
+        for _uws, op in op_rows:
+            wid = str(_uws.water_system_id)
+            operators_by_water_id.setdefault(wid, []).append(
+                {
+                    "id": str(op.id),
+                    "name": op.name,
+                    "email": op.email,
+                    "phone": op.phone or None,
+                }
+            )
+
+    out_water = []
+    for ws in water_systems:
+        rec = WaterEnergyLoggingDaily.query.filter_by(
+            water_system_id=ws.id,
+            log_date=water_day,
+        ).first()
+        if not rec:
+            bucket = "missing"
+        elif rec.status == SUBMISSION_STATUS_DRAFTED:
+            bucket = "draft"
+        elif rec.status == SUBMISSION_STATUS_SUBMITTED:
+            bucket = "submitted"
+        elif rec.status == SUBMISSION_STATUS_ACCEPTED:
+            bucket = "accepted"
+        elif rec.status == SUBMISSION_STATUS_REJECTED:
+            bucket = "rejected"
+        elif rec.status == SUBMISSION_STATUS_REVERTED_BACK:
+            bucket = "reverted_back"
+        else:
+            bucket = rec.status or "unknown"
+
+        out_water.append(
+            {
+                "id": str(ws.id),
+                "tehsil": ws.tehsil,
+                "village": ws.village,
+                "settlement": ws.settlement,
+                "unique_identifier": ws.unique_identifier,
+                "assigned_operators": operators_by_water_id.get(str(ws.id), []),
+                "daily_status": bucket,
+                "daily_log": None
+                if not rec
+                else {
+                    "record_id": str(rec.id),
+                    "status": rec.status,
+                },
+            }
+        )
+
+    out_solar = []
+    for ss in solar_systems:
+        mrec = SolarEnergyLoggingMonthly.query.filter_by(
+            solar_system_id=ss.id,
+            year=solar_year,
+            month=solar_month,
+        ).first()
+        out_solar.append(
+            {
+                "id": str(ss.id),
+                "tehsil": ss.tehsil,
+                "village": ss.village,
+                "settlement": ss.settlement,
+                "unique_identifier": ss.unique_identifier,
+                "monthly_status": "missing" if not mrec else "logged",
+                "monthly_log": None
+                if not mrec
+                else {
+                    "record_id": str(mrec.id),
+                    "has_data": True,
+                },
+            }
+        )
+
+    return jsonify(
+        {
+            "water_date": water_day.isoformat(),
+            "solar_year": solar_year,
+            "solar_month": solar_month,
+            "water_systems": out_water,
+            "solar_systems": out_solar,
+        }
+    ), 200
 
 
 def _coerce_optional_str(val):
@@ -512,19 +669,33 @@ def delete_water_system(system_id):
 @jwt_required()
 @min_role_required('ADMIN')
 def get_solar_systems():
-    """Tehsil managers (write) and program roles (read-all) — solar site registry."""
+    """Tehsil managers (write) and program roles (read-all) — solar site registry.
+
+    Optional query params (same semantics as /dashboard/*): tehsil, village —
+    omit or use 'All Tehsils' / 'All Villages' for no filter.
+    """
     current_user_id = get_jwt_identity()
     user = UserService.get_user_by_id(current_user_id)
     if not user:
         return jsonify({"message": "User not found"}), 404
     rk = user_rank(user)
     ts = list(user_assigned_tehsils(user))
+    filter_tehsil = request.args.get("tehsil")
+    filter_village = request.args.get("village")
+
     if rk >= ROLE_RANK[SUPER_ADMIN]:
-        systems = SolarSystem.query.all()
+        q = SolarSystem.query
     elif ts:
-        systems = SolarSystem.query.filter(SolarSystem.tehsil.in_(ts)).all()
+        q = SolarSystem.query.filter(SolarSystem.tehsil.in_(ts))
     else:
-        systems = []
+        return jsonify([]), 200
+
+    if filter_tehsil and filter_tehsil != "All Tehsils":
+        q = q.filter(SolarSystem.tehsil == filter_tehsil)
+    if filter_village and filter_village != "All Villages":
+        q = q.filter(SolarSystem.village == filter_village)
+
+    systems = q.all()
     return jsonify(
         [
             {

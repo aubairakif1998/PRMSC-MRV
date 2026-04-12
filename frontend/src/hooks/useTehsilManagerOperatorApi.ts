@@ -52,10 +52,10 @@ export function useTehsilManagerOperatorApi() {
     mutationFn: (systemId: string | number) => getWaterSystemService(systemId),
   });
   const getSolarSystemsMutation = useMutation({
-    mutationFn: () => getSolarSystemsService(),
+    mutationFn: (filters?: QueryFilters) => getSolarSystemsService(filters ?? {}),
   });
   const getWaterSystemsMutation = useMutation({
-    mutationFn: () => getWaterSystemsService(),
+    mutationFn: (filters?: QueryFilters) => getWaterSystemsService(filters ?? {}),
   });
   const deleteSolarSystemMutation = useMutation({
     mutationFn: (systemId: string | number) => deleteSolarSystemService(systemId),

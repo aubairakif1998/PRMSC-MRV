@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BarChart3,
+  CalendarClock,
   ClipboardList,
   Database,
   Droplets,
@@ -103,6 +104,11 @@ const MainLayout = () => {
           path: tehsilRoutes.solarMonthlyLogging,
           icon: <ClipboardList className="size-4" />,
           label: "Solar Monthly Logging",
+        },
+        {
+          path: tehsilRoutes.loggingCompliance,
+          icon: <CalendarClock className="size-4" />,
+          label: "Logging compliance",
         },
 
         {

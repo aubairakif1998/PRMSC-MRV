@@ -151,3 +151,12 @@ input:focus {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Leaflet custom DivIcon markers (SystemsMapCard) */
+.hq-leaflet-pin-icon {
+  background: transparent !important;
+  border: none !important;
+}
+.hq-leaflet-pin-wrap {
+  line-height: 0;
+}

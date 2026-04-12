@@ -353,24 +353,38 @@ def upload_image():
 @jwt_required()
 @min_role_required('USER')
 def get_water_systems():
-    """Tubewell operators: assigned systems; ADMIN: tehsil scope; SUPER_ADMIN+ read all."""
+    """Tubewell operators: assigned systems; ADMIN: tehsil scope; SUPER_ADMIN+ read all.
+
+    Optional query params (same semantics as /dashboard/*): tehsil, village —
+    omit or use 'All Tehsils' / 'All Villages' for no filter.
+    """
     current_user_id = get_jwt_identity()
     user = UserService.get_user_by_id(current_user_id)
     if not user:
         return jsonify({"message": "User not found"}), 404
     rk = user_rank(user)
     ts = list(user_assigned_tehsils(user))
+    filter_tehsil = request.args.get("tehsil")
+    filter_village = request.args.get("village")
+
     if rk >= ROLE_RANK[SUPER_ADMIN]:
-        systems = WaterSystem.query.all()
+        q = WaterSystem.query
     elif user_role_code(user) == USER:
         wids = user.assigned_water_system_ids
-        systems = (
-            WaterSystem.query.filter(WaterSystem.id.in_(wids)).all() if wids else []
-        )
+        if not wids:
+            return jsonify([]), 200
+        q = WaterSystem.query.filter(WaterSystem.id.in_(wids))
     elif ts:
-        systems = WaterSystem.query.filter(WaterSystem.tehsil.in_(ts)).all()
+        q = WaterSystem.query.filter(WaterSystem.tehsil.in_(ts))
     else:
-        systems = []
+        return jsonify([]), 200
+
+    if filter_tehsil and filter_tehsil != "All Tehsils":
+        q = q.filter(WaterSystem.tehsil == filter_tehsil)
+    if filter_village and filter_village != "All Villages":
+        q = q.filter(WaterSystem.village == filter_village)
+
+    systems = q.all()
     return jsonify([{
         "id": str(s.id),
         "tehsil": s.tehsil,

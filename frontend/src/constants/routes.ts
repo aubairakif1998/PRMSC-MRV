@@ -23,6 +23,8 @@ export const tehsilRoutes = {
   solarEnergyEdit: (recordId: string) =>
     `${TEHSIL_BASE}/solar-energy-data/${encodeURIComponent(recordId)}`,
   // solarSubmissions: `${TEHSIL_BASE}/solar-submissions`,
+  /** Tubewell daily + solar monthly logging compliance (tehsil manager). */
+  loggingCompliance: `${TEHSIL_BASE}/logging-compliance`,
   /** Aggregated monthly logs across all registered solar sites (tehsil manager). */
   solarMonthlyLogging: `${TEHSIL_BASE}/solar-monthly-logging`,
   solarMonthlyLogEdit: (recordId: string) =>

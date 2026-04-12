@@ -37,6 +37,7 @@ import WaterSubmissionDetailsPage from "./pages/tehsil/submissions/WaterSubmissi
 
 import ExecutiveDashboard from "./pages/executive/ExecutiveDashboard";
 import TehsilManagerDashboard from "./pages/tehsil/dashboard/TehsilManagerDashboard";
+import LoggingCompliance from "./pages/tehsil/logging/LoggingCompliance";
 
 import SubmissionsAudit from "./pages/verification/VerificationDashboard";
 import SubmissionReview from "./pages/verification/SubmissionReview";
@@ -266,6 +267,15 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={[...TEHSIL_MANAGER_ROLES]}>
                   <SolarMonthlyLogging />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/tehsil/logging-compliance"
+              element={
+                <ProtectedRoute allowedRoles={[...TEHSIL_MANAGER_ROLES]}>
+                  <LoggingCompliance />
                 </ProtectedRoute>
               }
             />

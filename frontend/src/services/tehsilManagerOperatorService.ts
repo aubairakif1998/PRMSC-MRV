@@ -32,8 +32,8 @@ export const getWaterSystemConfig = async (
   return response.data;
 };
 
-export const getWaterSystems = async () => {
-  const response = await api.get("/operator/water-systems");
+export const getWaterSystems = async (filters: QueryFilters = {}) => {
+  const response = await api.get(`/operator/water-systems${buildQueryString(filters)}`);
   return response.data;
 };
 
@@ -142,8 +142,16 @@ export const deleteSolarSystem = async (systemId: string | number) => {
   return response.data;
 };
 
-export const getSolarSystems = async () => {
-  const response = await api.get("/operator/solar-systems");
+export const getSolarSystems = async (filters: QueryFilters = {}) => {
+  const response = await api.get(`/operator/solar-systems${buildQueryString(filters)}`);
+  return response.data;
+};
+
+/** Tehsil manager: daily water log + monthly solar log compliance for assigned tehsils. */
+export const getLoggingCompliance = async (params: QueryFilters = {}) => {
+  const response = await api.get(
+    `/operator/logging-compliance${buildQueryString(params)}`,
+  );
   return response.data;
 };
 

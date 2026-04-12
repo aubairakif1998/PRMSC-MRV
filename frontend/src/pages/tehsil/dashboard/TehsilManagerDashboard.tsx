@@ -317,6 +317,25 @@ const TehsilManagerDashboard = () => {
             }}
           />
         </div>
+
+        <Card className="rounded-2xl border-dashed border-slate-200 bg-white">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Logging compliance</CardTitle>
+            <CardDescription>
+              Track daily tubewell submissions and monthly solar grid logs across your tehsil — what is missing and
+              what is on track.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate(tehsilRoutes.loggingCompliance)}
+            >
+              Open logging compliance
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
