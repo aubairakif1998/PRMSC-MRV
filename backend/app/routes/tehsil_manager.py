@@ -20,7 +20,7 @@ from app.models.models import (
     SUBMISSION_STATUS_REVERTED_BACK,
 )
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.utils.decorators import min_role_required
+from app.utils.decorators import min_role_required, tehsil_manager_required
 from app.rbac import (
     ADMIN,
     SUPER_ADMIN,
@@ -221,6 +221,61 @@ def get_logging_compliance():
             "solar_systems": out_solar,
         }
     ), 200
+
+
+@tehsil_manager_bp.route("/water-operator-assignments", methods=["GET"])
+@tehsil_manager_required
+def list_water_operator_assignments():
+    """
+    Tehsil manager: all tubewell operators with at least one water system in scope,
+    their assignments (in scope), and the full catalog of water systems the manager may assign.
+    """
+    user = UserService.get_user_by_id(get_jwt_identity())
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    data = UserService.list_tubewell_operator_assignments(user)
+    return jsonify(data), 200
+
+
+@tehsil_manager_bp.route("/water-operator-assignments/<operator_id>", methods=["PUT"])
+@tehsil_manager_required
+def replace_water_operator_assignments(operator_id):
+    """
+    Replace this operator's water-system links within the caller's tehsil scope.
+    Send `water_system_ids` (array) — omitting a system revokes it in scope; `[]` revokes all in scope.
+    """
+    user = UserService.get_user_by_id(get_jwt_identity())
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    body = request.get_json()
+    if body is None:
+        body = {}
+    ids = body.get("water_system_ids")
+    if ids is not None and not isinstance(ids, list):
+        return jsonify({"message": "water_system_ids must be an array"}), 400
+    try:
+        updated = UserService.replace_tubewell_operator_water_assignments(
+            user, operator_id, ids if isinstance(ids, list) else []
+        )
+    except TehsilAccessDenied as exc:
+        return jsonify({"message": str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({"message": str(exc)}), 400
+
+    return (
+        jsonify(
+            {
+                "message": "Assignments updated",
+                "user": {
+                    "id": str(updated.id),
+                    "name": updated.name,
+                    "email": updated.email,
+                    "water_system_ids": updated.assigned_water_system_ids,
+                },
+            }
+        ),
+        200,
+    )
 
 
 def _coerce_optional_str(val):

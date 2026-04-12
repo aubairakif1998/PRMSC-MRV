@@ -38,6 +38,7 @@ import WaterSubmissionDetailsPage from "./pages/tehsil/submissions/WaterSubmissi
 import ExecutiveDashboard from "./pages/executive/ExecutiveDashboard";
 import TehsilManagerDashboard from "./pages/tehsil/dashboard/TehsilManagerDashboard";
 import LoggingCompliance from "./pages/tehsil/logging/LoggingCompliance";
+import WaterOperatorAssignments from "./pages/tehsil/operators/WaterOperatorAssignments";
 
 import SubmissionsAudit from "./pages/verification/VerificationDashboard";
 import SubmissionReview from "./pages/verification/SubmissionReview";
@@ -189,6 +190,15 @@ function App() {
             <Route
               path="/admin/onboard-operator"
               element={<Navigate to="/tehsil/onboard-operator" replace />}
+            />
+
+            <Route
+              path="/tehsil/operator-assignments"
+              element={
+                <ProtectedRoute allowedRoles={[...TEHSIL_MANAGER_ROLES]}>
+                  <WaterOperatorAssignments />
+                </ProtectedRoute>
+              }
             />
 
             <Route

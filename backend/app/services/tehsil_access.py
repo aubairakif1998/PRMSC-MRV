@@ -30,6 +30,22 @@ def assigned_tehsil_set(user: User) -> frozenset[str]:
     return frozenset(link.tehsil for link in links)
 
 
+def canonical_assigned_tehsil_set(user: User) -> frozenset[str]:
+    """
+    Tehsil manager's ``user_tehsils``, normalized to predefined names (see ``canonical_tehsil``).
+    Use this when comparing to ``water_systems.tehsil`` so casing/spelling cannot bypass scope.
+    """
+    if user_role_code(user) != ADMIN:
+        return frozenset()
+    links = getattr(user, "tehsil_links", None) or []
+    out: set[str] = set()
+    for link in links:
+        c = canonical_tehsil(link.tehsil)
+        if c:
+            out.add(c)
+    return frozenset(out)
+
+
 def has_full_tehsil_access(user: User) -> bool:
     return user_rank(user) >= ROLE_RANK[SUPER_ADMIN]
 
@@ -72,7 +88,7 @@ def user_may_access_tehsil(
         if code == USER:
             return c in operator_tehsils_derived_from_water_systems(user)
         if code == ADMIN:
-            return c in assigned_tehsil_set(user)
+            return c in canonical_assigned_tehsil_set(user)
         return False
     if has_full_tehsil_access(user):
         return True
@@ -81,7 +97,7 @@ def user_may_access_tehsil(
         return False
     if code == USER:
         return c in operator_tehsils_derived_from_water_systems(user)
-    return c in assigned_tehsil_set(user)
+    return c in canonical_assigned_tehsil_set(user)
 
 
 def assert_user_may_access_tehsil(
@@ -169,7 +185,7 @@ def assert_actor_may_assign_water_systems_to_operator(
     if user_role_code(actor) != ADMIN:
         raise TehsilAccessDenied("Only tehsil managers can assign water systems to operators")
 
-    actor_ts = assigned_tehsil_set(actor)
+    actor_ts = canonical_assigned_tehsil_set(actor)
     for ws in systems:
         ct = canonical_tehsil(ws.tehsil)
         if not ct or ct not in actor_ts:
@@ -177,3 +193,24 @@ def assert_actor_may_assign_water_systems_to_operator(
                 f"Water system {ws.id} is outside your tehsil scope — you cannot assign it"
             )
     return systems
+
+
+def manageable_water_system_ids_for_assignment(actor: User) -> set[str]:
+    """
+    IDs of water systems a tehsil manager may link to tubewell operators.
+
+    Only ``ADMIN`` users (tehsil managers) with ``user_tehsils`` may manage links.
+    Systems are included only when ``water_systems.tehsil`` matches one of the manager's
+    assigned tehsils (after canonicalization). Program-wide roles do not receive all IDs here.
+    """
+    ids: set[str] = set()
+    if user_role_code(actor) != ADMIN:
+        return set()
+    actor_ts = canonical_assigned_tehsil_set(actor)
+    if not actor_ts:
+        return set()
+    for ws in WaterSystem.query.all():
+        c = canonical_tehsil(ws.tehsil)
+        if c and c in actor_ts:
+            ids.add(str(ws.id))
+    return ids

@@ -155,6 +155,24 @@ export const getLoggingCompliance = async (params: QueryFilters = {}) => {
   return response.data;
 };
 
+/** Tehsil manager: list tubewell operators and water-system assignments in scope. */
+export const getWaterOperatorAssignments = async () => {
+  const response = await api.get("/operator/water-operator-assignments");
+  return response.data;
+};
+
+/** Tehsil manager: replace one operator's assignments within tehsil scope (`[]` revokes all in scope). */
+export const replaceWaterOperatorAssignments = async (
+  operatorId: string,
+  waterSystemIds: string[],
+) => {
+  const response = await api.put(
+    `/operator/water-operator-assignments/${encodeURIComponent(operatorId)}`,
+    { water_system_ids: waterSystemIds },
+  );
+  return response.data;
+};
+
 export const getSolarSupplyData = async (filters: QueryFilters = {}) => {
   const response = await api.get(
     `/operator/solar-supply-data${buildQueryString(filters)}`,

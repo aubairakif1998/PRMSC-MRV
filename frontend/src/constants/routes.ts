@@ -4,6 +4,8 @@ export const TEHSIL_BASE = "/tehsil" as const;
 export const tehsilRoutes = {
   dashboard: TEHSIL_BASE,
   onboardOperator: `${TEHSIL_BASE}/onboard-operator`,
+  /** View and edit which water systems each tubewell operator may log (in your tehsil). */
+  operatorAssignments: `${TEHSIL_BASE}/operator-assignments`,
   waterSystems: `${TEHSIL_BASE}/water-systems`,
   waterSubmissions: `${TEHSIL_BASE}/submissions`,
   waterSubmissionDetails: (id: string) =>

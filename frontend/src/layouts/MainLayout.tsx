@@ -14,6 +14,7 @@ import {
   Menu,
   Sun,
   UserPlus,
+  Users,
   User as UserIcon,
   X,
 } from "lucide-react";
@@ -90,6 +91,11 @@ const MainLayout = () => {
               } satisfies MenuItem,
             ]
           : []),
+        {
+          path: tehsilRoutes.operatorAssignments,
+          icon: <Users className="size-4" />,
+          label: "Operator assignments",
+        },
         {
           path: tehsilRoutes.waterSystems,
           icon: <Droplets className="size-4" />,

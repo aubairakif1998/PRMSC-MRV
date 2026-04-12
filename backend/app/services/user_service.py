@@ -1,9 +1,14 @@
 from sqlalchemy.orm import selectinload
 
 from app.extensions import db
-from app.models.models import Role, User, UserWaterSystem
-from app.rbac import USER
-from app.services.tehsil_access import assert_actor_may_assign_water_systems_to_operator
+from app.models.models import Role, User, UserWaterSystem, WaterSystem
+from app.rbac import USER, user_role_code
+from app.services.tehsil_access import (
+    assert_actor_may_assign_water_systems_to_operator,
+    assert_user_may_access_water_system,
+    manageable_water_system_ids_for_assignment,
+    TehsilAccessDenied,
+)
 
 
 class UserService:
@@ -52,3 +57,130 @@ class UserService:
             db.session.add(UserWaterSystem(user_id=u.id, water_system_id=s.id))
         db.session.commit()
         return UserService.get_user_by_id(u.id)
+
+    @staticmethod
+    def list_tubewell_operator_assignments(actor: User) -> dict:
+        """Operators with at least one assignment in the actor's manageable scope, plus catalog."""
+        manageable = manageable_water_system_ids_for_assignment(actor)
+        if not manageable:
+            return {"operators": [], "water_systems_catalog": []}
+
+        operator_ids = (
+            db.session.query(UserWaterSystem.user_id)
+            .filter(UserWaterSystem.water_system_id.in_(manageable))
+            .distinct()
+            .all()
+        )
+        uid_list = [r[0] for r in operator_ids]
+
+        operators_out: list[dict] = []
+        for uid in uid_list:
+            u = User.query.get(uid)
+            if not u or user_role_code(u) != USER:
+                continue
+            ws_rows = (
+                WaterSystem.query.join(
+                    UserWaterSystem,
+                    UserWaterSystem.water_system_id == WaterSystem.id,
+                )
+                .filter(
+                    UserWaterSystem.user_id == uid,
+                    WaterSystem.id.in_(manageable),
+                )
+                .order_by(
+                    WaterSystem.tehsil,
+                    WaterSystem.village,
+                    WaterSystem.unique_identifier,
+                )
+                .all()
+            )
+            operators_out.append(
+                {
+                    "id": str(u.id),
+                    "name": u.name,
+                    "email": u.email,
+                    "phone": u.phone or None,
+                    "water_systems": [
+                        {
+                            "id": str(ws.id),
+                            "unique_identifier": ws.unique_identifier,
+                            "village": ws.village,
+                            "tehsil": ws.tehsil,
+                            "settlement": ws.settlement,
+                        }
+                        for ws in ws_rows
+                    ],
+                }
+            )
+        operators_out.sort(key=lambda row: row["name"].lower())
+
+        catalog = (
+            WaterSystem.query.filter(WaterSystem.id.in_(manageable))
+            .order_by(
+                WaterSystem.tehsil,
+                WaterSystem.village,
+                WaterSystem.unique_identifier,
+            )
+            .all()
+        )
+        water_systems_catalog = [
+            {
+                "id": str(ws.id),
+                "unique_identifier": ws.unique_identifier,
+                "village": ws.village,
+                "tehsil": ws.tehsil,
+                "settlement": ws.settlement,
+            }
+            for ws in catalog
+        ]
+
+        return {
+            "operators": operators_out,
+            "water_systems_catalog": water_systems_catalog,
+        }
+
+    @staticmethod
+    def replace_tubewell_operator_water_assignments(
+        actor: User,
+        operator_id: str,
+        water_system_ids: list,
+    ) -> User:
+        """
+        Replace this operator's assignments within the actor's manageable scope.
+        Systems outside that scope are unchanged. Omitting a system ID revokes it (in scope).
+        """
+        manageable = manageable_water_system_ids_for_assignment(actor)
+        if not manageable:
+            raise TehsilAccessDenied("No permission to manage water system assignments")
+
+        op = UserService.get_user_by_id(operator_id)
+        if not op or user_role_code(op) != USER:
+            raise ValueError("User is not a tubewell operator")
+
+        want: set[str] = set()
+        for raw in water_system_ids or []:
+            if raw is None:
+                continue
+            sid = str(raw).strip()
+            if not sid:
+                continue
+            ws = WaterSystem.query.get(sid)
+            if not ws:
+                raise ValueError(f"Water system not found: {sid}")
+            if str(ws.id) not in manageable:
+                raise TehsilAccessDenied(
+                    "One or more water systems are outside your assignment scope"
+                )
+            assert_user_may_access_water_system(actor, ws, for_write=True)
+            want.add(str(ws.id))
+
+        UserWaterSystem.query.filter(
+            UserWaterSystem.user_id == operator_id,
+            UserWaterSystem.water_system_id.in_(manageable),
+        ).delete(synchronize_session=False)
+
+        for sid in sorted(want):
+            db.session.add(UserWaterSystem(user_id=operator_id, water_system_id=sid))
+
+        db.session.commit()
+        return UserService.get_user_by_id(operator_id)
