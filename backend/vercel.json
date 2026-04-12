@@ -1,9 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "pip install -r requirements.txt",
-  "functions": {
-    "main.py": {
-      "excludeFiles": "{migrations/**,docs/**,**/*.md,.env*,**/__pycache__/**,**/*.pyc}"
-    }
-  }
+  "installCommand": "pip install -r requirements.txt"
 }
