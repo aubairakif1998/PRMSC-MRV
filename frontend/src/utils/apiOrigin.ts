@@ -8,7 +8,7 @@ export function getApiOrigin(): string {
     .toUpperCase();
   const fallback =
     env === "PROD"
-      ? "https://prmsc-mrv.onrender.com/api"
+      ? "https://prmsc-mrv-api.vercel.app//api"
       : "http://127.0.0.1:5001/api";
   const raw = import.meta.env.VITE_API_URL?.trim() || fallback;
   return raw.replace(/\/?api\/?$/i, "") || "http://127.0.0.1:5000";

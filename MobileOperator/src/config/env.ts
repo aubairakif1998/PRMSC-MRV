@@ -13,7 +13,7 @@ const ENV = String((Config as unknown as { ENV?: unknown }).ENV ?? '')
 const isProdEnv = ENV === 'PROD' || ENV === 'PRODUCTION';
 const isDevEnv = ENV === 'DEV' || ENV === 'DEVELOPMENT' || ENV === 'LOCAL';
 
-const PROD_API_ORIGIN = 'https://prmsc-mrv.onrender.com';
+const PROD_API_ORIGIN = 'https://prmsc-mrv-api.vercel.app/';
 const DEV_API_ORIGIN = 'http://127.0.0.1:5001';
 
 export const API_URL = isProdEnv
