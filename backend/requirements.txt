@@ -9,3 +9,4 @@ openpyxl
 cryptography
 fpdf2
 boto3
+gunicorn

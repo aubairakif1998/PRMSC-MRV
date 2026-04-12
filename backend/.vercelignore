@@ -1,7 +1,11 @@
+# shrink serverless bundle; runtime does not execute Alembic from the deployment
+migrations/
+docs/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
 .env
-.env.local
-.env.production
-__pycache__
-**/__pycache__
-*.py[cod]
-*$py.class
+.env.*

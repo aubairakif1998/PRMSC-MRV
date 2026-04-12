@@ -26,6 +26,8 @@ def build_water_submission_detail_response(submission: Submission) -> dict:
         record_data = {
             "year": record.log_date.year if record.log_date else None,
             "month": record.log_date.month if record.log_date else None,
+            "day": record.log_date.day if record.log_date else None,
+            "log_date": record.log_date.isoformat() if record.log_date else None,
             "last_edited_at": record.updated_at.isoformat()
             if getattr(record, "updated_at", None)
             else None,

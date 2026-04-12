@@ -17,24 +17,6 @@ def _load_env() -> None:
 _load_env()
 
 
-def _parse_cors_origins() -> list[str]:
-    """
-    Comma-separated CORS_ORIGINS env var. When unset, allow common local dev URLs
-    (needed for credentialed requests: wildcard origin is invalid with credentials).
-    """
-    raw = os.environ.get("CORS_ORIGINS", "").strip()
-    if raw:
-        return [o.strip() for o in raw.split(",") if o.strip()]
-    return [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:4200",
-        "http://127.0.0.1:4200",
-    ]
-
-
 class Config:
     # Security
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key-123")
@@ -62,7 +44,8 @@ class Config:
         f"{SUPABASE_URL}/storage/v1/object/public" if SUPABASE_URL else "",
     )
 
-    CORS_ORIGINS = _parse_cors_origins()
+    # Populated in create_app via app.cors.resolve_cors_allowlist (from CORS_ORIGINS env).
+    CORS_ORIGINS: list[str] = []
 
     # File Uploads
     UPLOAD_FOLDER = os.path.join(os.getcwd(), "app", "uploads")
