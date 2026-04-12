@@ -59,19 +59,12 @@ const MainLayout = () => {
     const items: MenuItem[] = [];
 
     if (exec) {
-      items.push(
-        {
-          path: HQ_DASHBOARD,
-          icon: <BarChart3 className="size-4" />,
-          label: "Organization KPI",
-          end: true,
-        },
-        {
-          path: "/submissions",
-          icon: <FileCheck className="size-4" />,
-          label: "Submissions",
-        },
-      );
+      items.push({
+        path: HQ_DASHBOARD,
+        icon: <BarChart3 className="size-4" />,
+        label: "Organization KPI",
+        end: true,
+      });
     }
 
     if (tehsilMgr) {

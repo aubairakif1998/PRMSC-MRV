@@ -104,6 +104,7 @@ export const getDashboardProgramSummary = async (filters: QueryFilters = {}) => 
   return response.data;
 };
 
+/** Bulk-meter water: monthly sums of daily `total_water_pumped` (all rows except rejected). */
 export const getDashboardWaterSupplied = async (filters: QueryFilters = {}) => {
   const response = await api.get(
     `/dashboard/water-supplied${buildQueryString(filters)}`,
@@ -111,6 +112,7 @@ export const getDashboardWaterSupplied = async (filters: QueryFilters = {}) => {
   return response.data;
 };
 
+/** Monthly sum of daily `pump_operating_hours` for all water systems (all rows except rejected). */
 export const getDashboardPumpHours = async (filters: QueryFilters = {}) => {
   const response = await api.get(
     `/dashboard/pump-hours${buildQueryString(filters)}`,

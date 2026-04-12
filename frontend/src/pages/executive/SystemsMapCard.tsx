@@ -308,11 +308,11 @@ export default function SystemsMapCard({ mapFilters, summaryCounts }: SystemsMap
     <Card className="border-border/80 !overflow-visible">
       <CardHeader className="gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
-          <CardTitle>Installed systems map</CardTitle>
+          <CardTitle>Map of sites</CardTitle>
           <CardDescription>
-            Pakistan overview with Punjab (PK) highlighted. Blue = water, amber = solar. Counts match the
-            summary cards above. Pins without GPS in the database use a dashed-border approximate position
-            until latitude/longitude are saved.
+            Water (blue) and solar (amber) sites in your filter, on Punjab (green outline) and Pakistan.
+            Counts match &quot;Sites on programme&quot; above. Dashed pins mean the map position is
+            approximate until GPS is saved on the record.
           </CardDescription>
         </div>
         <div className="flex flex-wrap items-center gap-2">

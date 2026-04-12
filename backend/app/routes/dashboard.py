@@ -5,10 +5,20 @@ from app.models.models import (
     WaterEnergyLoggingDaily,
     SolarSystem,
     SolarEnergyLoggingMonthly,
+    SUBMISSION_STATUS_REJECTED,
 )
-from sqlalchemy import extract, func
+from sqlalchemy import extract, func, or_
 
 dashboard_bp = Blueprint('dashboard', __name__)
+
+
+def _log_not_rejected():
+    """SQL-safe: include NULL status (legacy rows) and every status except rejected."""
+    return or_(
+        WaterEnergyLoggingDaily.status.is_(None),
+        WaterEnergyLoggingDaily.status != SUBMISSION_STATUS_REJECTED,
+    )
+
 
 @dashboard_bp.route('/program-summary', methods=['GET'])
 def get_program_summary():
@@ -44,6 +54,11 @@ def get_program_summary():
 
 @dashboard_bp.route('/water-supplied', methods=['GET'])
 def get_water_supplied():
+    """Monthly m³: sum of daily `total_water_pumped` per calendar month for all water systems.
+
+    Not restricted to “bulk meter” systems only — if `meter_serial_number` is missing in the
+    registry but the operator still logged volume, it still counts here. Rejected logs excluded.
+    """
     tehsil = request.args.get('tehsil')
     village = request.args.get('village')
     month = request.args.get('month', type=int)
@@ -54,13 +69,12 @@ def get_water_supplied():
     query = (
         db.session.query(
             w_m.label("month"),
-            func.sum(WaterEnergyLoggingDaily.total_water_pumped).label("total"),
+            func.sum(
+                func.coalesce(WaterEnergyLoggingDaily.total_water_pumped, 0.0)
+            ).label("total"),
         )
         .join(WaterSystem, WaterEnergyLoggingDaily.water_system_id == WaterSystem.id)
-        .filter(
-            WaterSystem.meter_serial_number != None,
-            WaterSystem.meter_serial_number != "",
-        )
+        .filter(_log_not_rejected())
     )
 
     if tehsil and tehsil != "All Tehsils":
@@ -82,6 +96,12 @@ def get_water_supplied():
 
 @dashboard_bp.route('/pump-hours', methods=['GET'])
 def get_pump_hours():
+    """Monthly pump run time: sum of daily `pump_operating_hours` for all water systems.
+
+    Same rows may also contribute to `/water-supplied` (m³) when both volume and hours are
+    logged — e.g. flow-metered sites can still record pump time. Not filtered by bulk meter
+    on the system record. Rejected logs excluded.
+    """
     tehsil = request.args.get('tehsil')
     village = request.args.get('village')
     month = request.args.get('month', type=int)
@@ -92,13 +112,12 @@ def get_pump_hours():
     query = (
         db.session.query(
             w_m.label("month"),
-            func.sum(WaterEnergyLoggingDaily.pump_operating_hours).label("total"),
+            func.sum(
+                func.coalesce(WaterEnergyLoggingDaily.pump_operating_hours, 0.0)
+            ).label("total"),
         )
         .join(WaterSystem, WaterEnergyLoggingDaily.water_system_id == WaterSystem.id)
-        .filter(
-            (WaterSystem.meter_serial_number == None)
-            | (WaterSystem.meter_serial_number == "")
-        )
+        .filter(_log_not_rejected())
     )
 
     if tehsil and tehsil != "All Tehsils":

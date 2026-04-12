@@ -22,7 +22,7 @@ export const PORTAL_ROLES: readonly UserRole[] = [
 /** Tehsil Manager Operator — tehsil-scoped operations. */
 export const TEHSIL_MANAGER_ROLES: readonly UserRole[] = [ROLE.ADMIN];
 
-/** Manager Operations + MRV COO — read-only org KPI + submissions (no tehsil facility forms). */
+/** Manager Operations + MRV COO — org KPI (no tehsil facility forms). */
 export const EXECUTIVE_ROLES: readonly UserRole[] = [
   ROLE.SUPER_ADMIN,
   ROLE.SYSTEM_ADMIN,
