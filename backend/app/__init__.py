@@ -9,6 +9,14 @@ from .db.supabase_client import build_database_uri, mask_database_uri
 from .extensions import db, jwt, migrate
 
 
+def _uses_ephemeral_disk() -> bool:
+    """Render, Vercel, and similar hosts: no durable local filesystem."""
+    truthy = ("1", "true", "yes")
+    render = os.environ.get("RENDER", "").lower() in truthy
+    vercel = os.environ.get("VERCEL", "").lower() in truthy
+    return render or vercel
+
+
 def _register_extensions(app: Flask) -> None:
     db.init_app(app)
     migrate.init_app(app, db)
@@ -42,10 +50,10 @@ def _register_blueprints(app: Flask) -> None:
 
 
 def create_app():
-    # Render (and similar PaaS): ephemeral disk — use /tmp for uploads/instance.
-    _on_render = os.environ.get("RENDER", "").lower() in ("1", "true", "yes")
+    # Ephemeral disk (Render, Vercel, etc.): use /tmp for uploads/instance.
+    ephemeral = _uses_ephemeral_disk()
     flask_kw = {}
-    if _on_render:
+    if ephemeral:
         flask_kw["instance_path"] = os.path.join(tempfile.gettempdir(), "mrv_instance")
 
     app = Flask(__name__, **flask_kw)
@@ -53,13 +61,23 @@ def create_app():
     app.config.from_object(config_by_name.get(env_name, config_by_name["development"]))
     app.config["CORS_ORIGINS"] = resolve_cors_allowlist(flask_env=env_name)
 
-    if _on_render:
+    if ephemeral:
         app.config["UPLOAD_FOLDER"] = os.path.join(tempfile.gettempdir(), "mrv_uploads")
+
+    # Vercel: one function invocation per request — avoid holding pooled connections.
+    if os.environ.get("VERCEL", "").lower() in ("1", "true", "yes"):
+        from sqlalchemy.pool import NullPool
+
+        engine_opts = dict(app.config.get("SQLALCHEMY_ENGINE_OPTIONS") or {})
+        engine_opts["pool_pre_ping"] = True
+        engine_opts["poolclass"] = NullPool
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = engine_opts
 
     db_url = os.environ.get("DATABASE_URL", "").strip()
     if not db_url:
         raise RuntimeError(
-            "DATABASE_URL is not set. Set it in the host environment (e.g. Render → Environment)."
+            "DATABASE_URL is not set. Set it in the host environment "
+            "(e.g. Render → Environment or Vercel → Settings → Environment Variables)."
         )
     app.config["SQLALCHEMY_DATABASE_URI"] = build_database_uri(db_url)
 

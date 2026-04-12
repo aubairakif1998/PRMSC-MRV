@@ -1,0 +1,245 @@
+{
+  "format": 1,
+  "restore": {
+    "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Infrastructure/MRV.Infrastructure.csproj": {}
+  },
+  "projects": {
+    "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Application/MRV.Application.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Application/MRV.Application.csproj",
+        "projectName": "MRV.Application",
+        "projectPath": "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Application/MRV.Application.csproj",
+        "packagesPath": "/Users/aubairakif/.nuget/packages/",
+        "outputPath": "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Application/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/aubairakif/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Domain/MRV.Domain.csproj": {
+                "projectPath": "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Domain/MRV.Domain.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "FluentValidation": {
+              "target": "Package",
+              "version": "[12.0.0, )"
+            },
+            "FluentValidation.DependencyInjectionExtensions": {
+              "target": "Package",
+              "version": "[12.0.0, )"
+            },
+            "MediatR": {
+              "target": "Package",
+              "version": "[13.0.0, )"
+            },
+            "Microsoft.AspNetCore.Authentication.JwtBearer": {
+              "target": "Package",
+              "version": "[9.0.9, )"
+            },
+            "Microsoft.EntityFrameworkCore": {
+              "target": "Package",
+              "version": "[9.0.9, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.AspNetCore.App": {
+              "privateAssets": "none"
+            },
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.304/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Domain/MRV.Domain.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Domain/MRV.Domain.csproj",
+        "projectName": "MRV.Domain",
+        "projectPath": "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Domain/MRV.Domain.csproj",
+        "packagesPath": "/Users/aubairakif/.nuget/packages/",
+        "outputPath": "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Domain/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/aubairakif/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.304/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Infrastructure/MRV.Infrastructure.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Infrastructure/MRV.Infrastructure.csproj",
+        "projectName": "MRV.Infrastructure",
+        "projectPath": "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Infrastructure/MRV.Infrastructure.csproj",
+        "packagesPath": "/Users/aubairakif/.nuget/packages/",
+        "outputPath": "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Infrastructure/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/aubairakif/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Application/MRV.Application.csproj": {
+                "projectPath": "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Application/MRV.Application.csproj"
+              },
+              "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Domain/MRV.Domain.csproj": {
+                "projectPath": "/Users/aubairakif/Codebases/PRMSC-HO/Github-PRMSC-MRV/PRMSC-MRV/MRVManagement/MRV.Domain/MRV.Domain.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "AspNetCore.HealthChecks.NpgSql": {
+              "target": "Package",
+              "version": "[9.0.0, )"
+            },
+            "Microsoft.EntityFrameworkCore": {
+              "target": "Package",
+              "version": "[9.0.9, )"
+            },
+            "Microsoft.EntityFrameworkCore.Design": {
+              "target": "Package",
+              "version": "[9.0.9, )"
+            },
+            "Microsoft.EntityFrameworkCore.Tools": {
+              "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[9.0.9, )"
+            },
+            "Npgsql.EntityFrameworkCore.PostgreSQL": {
+              "target": "Package",
+              "version": "[9.0.4, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.304/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

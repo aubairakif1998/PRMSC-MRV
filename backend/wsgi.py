@@ -1,6 +1,8 @@
 """
 WSGI entry for production (Gunicorn on Render, etc.).
 
+On Vercel, ``main.py`` imports ``app`` from this module; Gunicorn uses ``wsgi:app``.
+
 Set FLASK_ENV=production and all secrets via the host environment (not this file).
 """
 import os
