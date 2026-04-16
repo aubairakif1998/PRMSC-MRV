@@ -261,7 +261,7 @@ const TehsilManagerDashboard = () => {
           </CardContent>
         </Card>
 
-        <div className="flex items-center gap-2">
+        {/* <div className="flex items-center gap-2">
           <Activity className="size-5 text-slate-700" />
           <h2 className="text-lg font-bold text-slate-800">
             Tehsil operations
@@ -335,7 +335,7 @@ const TehsilManagerDashboard = () => {
               Open logging compliance
             </Button>
           </CardContent>
-        </Card>
+        </Card> */}
       </div>
     </div>
   );

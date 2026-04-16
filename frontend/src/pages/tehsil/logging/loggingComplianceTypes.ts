@@ -35,6 +35,58 @@ export type CompliancePayload = {
   solar_systems: SolarSystemRow[];
 };
 
+/** One row per calendar day from `/operator/logging-compliance/water-daily-range`. */
+export type WaterDailyRangeDay = {
+  date: string;
+  daily_status: string;
+  daily_log: { record_id: string; status: string } | null;
+};
+
+export type WaterDailyRangePayload = {
+  water_system_id: string;
+  unique_identifier: string;
+  village: string;
+  tehsil: string;
+  settlement?: string | null;
+  date_from: string;
+  date_to: string;
+  assigned_operators?: AssignedOperator[];
+  days: WaterDailyRangeDay[];
+};
+
+export type WaterSystemListItem = {
+  id: string;
+  tehsil: string;
+  village: string;
+  settlement?: string | null;
+  unique_identifier: string;
+};
+
+/** One calendar month from `/operator/logging-compliance/solar-monthly-year`. */
+export type SolarMonthlyYearMonthRow = {
+  month: number;
+  monthly_status: string;
+  monthly_log: { record_id: string; has_data: boolean } | null;
+};
+
+export type SolarMonthlyYearPayload = {
+  solar_system_id: string;
+  unique_identifier: string;
+  village: string;
+  tehsil: string;
+  settlement?: string | null;
+  year: number;
+  months: SolarMonthlyYearMonthRow[];
+};
+
+export type SolarSystemListItem = {
+  id: string;
+  tehsil: string;
+  village: string;
+  settlement?: string | null;
+  unique_identifier: string;
+};
+
 export const MONTH_NAMES = [
   "",
   "January",

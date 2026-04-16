@@ -3,6 +3,10 @@
  */
 import api from "../api/api";
 import { buildQueryString, type AnyRecord, type QueryFilters } from "./types";
+import type {
+  SolarMonthlyYearPayload,
+  WaterDailyRangePayload,
+} from "../pages/tehsil/logging/loggingComplianceTypes";
 
 export const createWaterSystem = async (formData: AnyRecord) => {
   const response = await api.post("/operator/water-system", formData);
@@ -155,6 +159,36 @@ export const getLoggingCompliance = async (params: QueryFilters = {}) => {
     `/operator/logging-compliance${buildQueryString(params)}`,
   );
   return response.data;
+};
+
+/** One water system: daily log status for each day in [date_from, date_to] (max 31 days). */
+export const getWaterDailyLoggingRange = async (params: {
+  water_system_id: string;
+  date_from: string;
+  date_to: string;
+}) => {
+  const response = await api.get(
+    `/operator/logging-compliance/water-daily-range${buildQueryString({
+      water_system_id: params.water_system_id,
+      date_from: params.date_from,
+      date_to: params.date_to,
+    })}`,
+  );
+  return response.data as WaterDailyRangePayload;
+};
+
+/** One solar site: monthly log status for months 1–12 in the given year. */
+export const getSolarMonthlyYearRange = async (params: {
+  solar_system_id: string;
+  year: number;
+}) => {
+  const response = await api.get(
+    `/operator/logging-compliance/solar-monthly-year${buildQueryString({
+      solar_system_id: params.solar_system_id,
+      year: params.year,
+    })}`,
+  );
+  return response.data as SolarMonthlyYearPayload;
 };
 
 /** Tehsil manager: list tubewell operators and water-system assignments in scope. */

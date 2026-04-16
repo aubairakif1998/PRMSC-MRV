@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from flask import Blueprint, request, jsonify, current_app
 from app.extensions import db
 from sqlalchemy import extract
@@ -63,7 +65,7 @@ from app.services.tehsil_access import (
     assert_user_may_view_or_log_water_system,
     assert_user_may_access_solar_system,
 )
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 tehsil_manager_bp = Blueprint("tehsil_manager", __name__)
 
@@ -221,6 +223,190 @@ def get_logging_compliance():
             "solar_systems": out_solar,
         }
     ), 200
+
+
+def _water_daily_status_bucket(rec: WaterEnergyLoggingDaily | None):
+    """Same buckets as `/logging-compliance` for one daily row."""
+    if not rec:
+        return "missing", None
+    if rec.status == SUBMISSION_STATUS_DRAFTED:
+        st = "draft"
+    elif rec.status == SUBMISSION_STATUS_SUBMITTED:
+        st = "submitted"
+    elif rec.status == SUBMISSION_STATUS_ACCEPTED:
+        st = "accepted"
+    elif rec.status == SUBMISSION_STATUS_REJECTED:
+        st = "rejected"
+    elif rec.status == SUBMISSION_STATUS_REVERTED_BACK:
+        st = "reverted_back"
+    else:
+        st = rec.status or "unknown"
+    return st, {
+        "record_id": str(rec.id),
+        "status": rec.status,
+    }
+
+
+@tehsil_manager_bp.route("/logging-compliance/water-daily-range", methods=["GET"])
+@jwt_required()
+@min_role_required("ADMIN")
+def get_water_daily_logging_range():
+    """
+    One water system: daily tubewell log status for each calendar day in [date_from, date_to]
+    (inclusive). Max span 31 days.
+    """
+    user = UserService.get_user_by_id(get_jwt_identity())
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    water_system_id = (request.args.get("water_system_id") or "").strip()
+    date_from_s = request.args.get("date_from")
+    date_to_s = request.args.get("date_to")
+
+    if not water_system_id:
+        return jsonify({"message": "water_system_id is required"}), 400
+    if not date_from_s or not date_to_s:
+        return jsonify({"message": "date_from and date_to are required (YYYY-MM-DD)"}), 400
+
+    try:
+        d0 = datetime.strptime(date_from_s, "%Y-%m-%d").date()
+        d1 = datetime.strptime(date_to_s, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"message": "Invalid date; use YYYY-MM-DD"}), 400
+
+    if d1 < d0:
+        return jsonify({"message": "date_to must be on or after date_from"}), 400
+
+    span = (d1 - d0).days + 1
+    if span > 31:
+        return jsonify({"message": "Range cannot exceed 31 days"}), 400
+
+    ws = WaterSystem.query.get(water_system_id)
+    if not ws:
+        return jsonify({"message": "Water system not found"}), 404
+
+    try:
+        assert_user_may_access_water_system(user, ws)
+    except TehsilAccessDenied as exc:
+        return jsonify({"message": str(exc)}), 403
+
+    assigned_operators: list[dict] = []
+    op_rows = (
+        db.session.query(UserWaterSystem, User)
+        .join(User, UserWaterSystem.user_id == User.id)
+        .filter(UserWaterSystem.water_system_id == ws.id)
+        .order_by(User.name.asc())
+        .all()
+    )
+    for _uws, op in op_rows:
+        assigned_operators.append(
+            {
+                "id": str(op.id),
+                "name": op.name,
+                "email": op.email,
+                "phone": op.phone or None,
+            }
+        )
+
+    days_out = []
+    cur = d0
+    while cur <= d1:
+        rec = WaterEnergyLoggingDaily.query.filter_by(
+            water_system_id=ws.id,
+            log_date=cur,
+        ).first()
+        st, log_payload = _water_daily_status_bucket(rec)
+        days_out.append(
+            {
+                "date": cur.isoformat(),
+                "daily_status": st,
+                "daily_log": log_payload,
+            }
+        )
+        cur += timedelta(days=1)
+
+    return (
+        jsonify(
+            {
+                "water_system_id": str(ws.id),
+                "unique_identifier": ws.unique_identifier,
+                "village": ws.village,
+                "tehsil": ws.tehsil,
+                "settlement": ws.settlement,
+                "date_from": d0.isoformat(),
+                "date_to": d1.isoformat(),
+                "assigned_operators": assigned_operators,
+                "days": days_out,
+            }
+        ),
+        200,
+    )
+
+
+@tehsil_manager_bp.route("/logging-compliance/solar-monthly-year", methods=["GET"])
+@jwt_required()
+@min_role_required("ADMIN")
+def get_solar_monthly_year_range():
+    """
+    One solar site: monthly grid log presence for each calendar month (1–12) in `year`.
+    """
+    user = UserService.get_user_by_id(get_jwt_identity())
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    solar_system_id = (request.args.get("solar_system_id") or "").strip()
+    year = request.args.get("year", type=int)
+
+    if not solar_system_id:
+        return jsonify({"message": "solar_system_id is required"}), 400
+    if year is None:
+        return jsonify({"message": "year is required"}), 400
+    if year < 2000 or year > 2100:
+        return jsonify({"message": "year is out of range"}), 400
+
+    ss = SolarSystem.query.get(solar_system_id)
+    if not ss:
+        return jsonify({"message": "Solar system not found"}), 404
+
+    try:
+        assert_user_may_access_solar_system(user, ss)
+    except TehsilAccessDenied as exc:
+        return jsonify({"message": str(exc)}), 403
+
+    months_out = []
+    for month in range(1, 13):
+        mrec = SolarEnergyLoggingMonthly.query.filter_by(
+            solar_system_id=ss.id,
+            year=year,
+            month=month,
+        ).first()
+        months_out.append(
+            {
+                "month": month,
+                "monthly_status": "logged" if mrec else "missing",
+                "monthly_log": None
+                if not mrec
+                else {
+                    "record_id": str(mrec.id),
+                    "has_data": True,
+                },
+            }
+        )
+
+    return (
+        jsonify(
+            {
+                "solar_system_id": str(ss.id),
+                "unique_identifier": ss.unique_identifier,
+                "village": ss.village,
+                "tehsil": ss.tehsil,
+                "settlement": ss.settlement,
+                "year": year,
+                "months": months_out,
+            }
+        ),
+        200,
+    )
 
 
 @tehsil_manager_bp.route("/water-operator-assignments", methods=["GET"])
