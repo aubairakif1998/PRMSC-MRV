@@ -13,8 +13,9 @@ const ExecutiveDashboard = () => {
   return (
     <ProgramDashboard
       headingTitle="Organization overview"
-      headingDescription={`See how water and solar programmes are performing across all tehsils—sites on the ground, volumes and run time, and solar import and export. Signed in as ${subtitle}.`}
+      headingDescription={`Enterprise view across tehsils: sites, water delivery, pump runtime, and solar energy. Signed in as ${subtitle}.`}
       managementView
+      mapPosition="top"
     />
   );
 };

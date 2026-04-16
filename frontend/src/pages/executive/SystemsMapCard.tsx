@@ -64,8 +64,9 @@ const PAKISTAN_VIEW_BOUNDS_LNGLAT: [[number, number], [number, number]] = [
 
 /** Leaflet maxBounds: [[south, west], [north, east]] in lat/lng */
 const MAP_MAX_BOUNDS_LEAFLET: L.LatLngBoundsExpression = [
-  [21.5, 58.0],
-  [39.0, 80.5],
+  // Keep zoom-out constrained to the Pakistan overview used in this dashboard.
+  [22.5, 59.5],
+  [38.0, 79.0],
 ];
 
 /** Esri World Street Map — not the OSM.org tile endpoint; good general-purpose basemap. */
@@ -347,10 +348,10 @@ export default function SystemsMapCard({ mapFilters, summaryCounts }: SystemsMap
             ref={mapRef}
             center={[30.5, 69.5]}
             zoom={5}
-            minZoom={4}
-            maxZoom={15}
+            minZoom={5}
+            maxZoom={12}
             maxBounds={MAP_MAX_BOUNDS_LEAFLET}
-            maxBoundsViscosity={0.85}
+            maxBoundsViscosity={1.0}
             className="h-[480px] w-full rounded-[inherit]"
             scrollWheelZoom
             whenReady={onMapReady}

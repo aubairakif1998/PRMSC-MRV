@@ -11,14 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import {
-  Building2,
-  Clock,
-  Droplets,
-  Gauge,
-  Sun,
-  Zap,
-} from "lucide-react";
+import { Building2, Clock, Droplets, Gauge, Sun, Zap } from "lucide-react";
 import { useProgramDashboardApi } from "../../hooks";
 import { getApiErrorMessage } from "../../lib/api-error";
 import { LOCATION_DATA, TEHSIL_OPTIONS } from "../../utils/locationData";
@@ -110,12 +103,15 @@ type ProgramDashboardProps = {
   headingDescription?: string;
   /** When true, show a short plain-language note for programme / field leads. */
   managementView?: boolean;
+  /** Executive layout: show map before KPI sections. */
+  mapPosition?: "top" | "inline";
 };
 
 const ProgramDashboard = ({
   headingTitle = "Program Dashboard",
   headingDescription = "Water and solar performance by area and time period.",
   managementView = true,
+  mapPosition = "inline",
 }: ProgramDashboardProps) => {
   const { user } = useAuth();
   const showSystemsMap = isExecutiveRole(user?.role);
@@ -190,19 +186,26 @@ const ProgramDashboard = ({
 
   const activeScopeLabel = useMemo(() => {
     const tehsil =
-      activeFilters.tehsil === "All Tehsils"
-        ? "All tehsils"
-        : activeFilters.tehsil;
+      activeFilters.tehsil === "All Tehsils" ? "All tehsils" : activeFilters.tehsil;
     const village =
-      activeFilters.village === "All Villages"
-        ? "All villages"
-        : activeFilters.village;
+      activeFilters.village === "All Villages" ? "All villages" : activeFilters.village;
     const month =
       activeFilters.month === "All Months"
         ? "All months"
         : MONTHS[Number(activeFilters.month) - 1];
     return `${tehsil} · ${village} · ${activeFilters.year} · ${month}`;
   }, [activeFilters]);
+
+  const activeScopeTooltip = useMemo(() => {
+    const tehsilPart =
+      activeFilters.tehsil === "All Tehsils" ? "All tehsils" : activeFilters.tehsil;
+    if (activeFilters.village === "All Villages") {
+      return activeFilters.tehsil === "All Tehsils"
+        ? "All villages"
+        : `All villages · ${tehsilPart}`;
+    }
+    return `${activeFilters.village} · ${tehsilPart}`;
+  }, [activeFilters.tehsil, activeFilters.village]);
 
   const waterByMonth = useMemo(
     () =>
@@ -276,6 +279,16 @@ const ProgramDashboard = ({
     [pumpByMonth],
   );
 
+  const waterPumpCombinedChartData = useMemo(
+    () =>
+      MONTHS.map((m, i) => ({
+        month: m,
+        waterM3: waterByMonth[i] ?? 0,
+        pumpH: pumpByMonth[i] ?? 0,
+      })),
+    [waterByMonth, pumpByMonth],
+  );
+
   const solarProgramChartData = useMemo(
     () =>
       MONTHS.map((m, i) => ({
@@ -300,13 +313,9 @@ const ProgramDashboard = ({
 
         {managementView ? (
           <p className="max-w-3xl border-l-2 border-primary/35 pl-4 text-sm leading-relaxed text-muted-foreground">
-            <span className="font-medium text-foreground">
-              What you are seeing:
-            </span>{" "}
-            Water results show monthly totals for volume (m³) and pump run time
-            (h) from daily logs—both may exist for the same site. Solar results
-            compare clean power sent into the grid with grid power used on
-            site—both come from monthly site records.
+            <span className="font-medium text-foreground">Note:</span> Water is
+            aggregated from daily logs; solar is aggregated from monthly site
+            records.
           </p>
         ) : null}
 
@@ -314,9 +323,7 @@ const ProgramDashboard = ({
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Filters</CardTitle>
             <CardDescription>
-              Pick tehsil, village, year, and optionally a single month. Charts
-              below show the full calendar year; the month choice narrows the
-              headline totals.
+              Select tehsil, village, year (optional month refines totals).
             </CardDescription>
             <p className="pt-2 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">Showing:</span>{" "}
@@ -414,16 +421,30 @@ const ProgramDashboard = ({
           </Card>
         ) : null}
 
+        {showSystemsMap && mapPosition === "top" ? (
+          <SystemsMapCard
+            mapFilters={{
+              tehsil: activeFilters.tehsil,
+              village: activeFilters.village,
+            }}
+            summaryCounts={
+              loading
+                ? null
+                : { water: summary.ohr_count, solar: summary.solar_facilities }
+            }
+          />
+        ) : null}
+
         <div className="space-y-3">
           <h2 className="text-base font-semibold tracking-tight text-foreground">
             Sites on programme
           </h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <Card className="border-border/70 shadow-sm">
               <CardHeader className="pb-2">
                 <CardDescription className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <Building2 className="size-3.5 text-blue-600" />
-                  Water points
+                  OHR Water Systems
                 </CardDescription>
                 <CardTitle className="font-heading text-3xl tabular-nums">
                   {loading ? (
@@ -435,38 +456,16 @@ const ProgramDashboard = ({
               </CardHeader>
               <CardContent className="pt-0">
                 <p className="text-xs text-muted-foreground">
-                  Tubewells and water schemes in your current selection.
+                  Water systems in scope.
                 </p>
               </CardContent>
             </Card>
-            <Card className="border-border/70 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardDescription className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <Gauge className="size-3.5 text-emerald-600" />
-                  Flow-metered points
-                </CardDescription>
-                <CardTitle className="font-heading text-3xl tabular-nums">
-                  {loading ? (
-                    <Skeleton className="h-9 w-24" />
-                  ) : (
-                    formatKpiValue(summary.bulk_meters)
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-xs text-muted-foreground">
-                  Where water volume (m³) is measured.
-                  {!loading && meterCoveragePct != null ? (
-                    <span> {meterCoveragePct}% of water points above.</span>
-                  ) : null}
-                </p>
-              </CardContent>
-            </Card>
+
             <Card className="border-border/70 shadow-sm">
               <CardHeader className="pb-2">
                 <CardDescription className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <Sun className="size-3.5 text-amber-600" />
-                  Solar sites
+                  Solar facilities
                 </CardDescription>
                 <CardTitle className="font-heading text-3xl tabular-nums">
                   {loading ? (
@@ -478,7 +477,7 @@ const ProgramDashboard = ({
               </CardHeader>
               <CardContent className="pt-0">
                 <p className="text-xs text-muted-foreground">
-                  Solar installations covered by monthly energy reporting.
+                  Solar sites in scope.
                 </p>
               </CardContent>
             </Card>
@@ -506,7 +505,7 @@ const ProgramDashboard = ({
               </CardHeader>
               <CardContent className="pt-0">
                 <p className="text-xs text-muted-foreground">
-                  From daily volume entries (m³).
+                  Water volume (m³).
                 </p>
               </CardContent>
             </Card>
@@ -526,7 +525,7 @@ const ProgramDashboard = ({
               </CardHeader>
               <CardContent className="pt-0">
                 <p className="text-xs text-muted-foreground">
-                  From daily pump hour entries.
+                  Pump runtime (h).
                 </p>
               </CardContent>
             </Card>
@@ -546,7 +545,7 @@ const ProgramDashboard = ({
               </CardHeader>
               <CardContent className="pt-0">
                 <p className="text-xs text-muted-foreground">
-                  Clean power fed into the grid.
+                  Exported to grid.
                 </p>
               </CardContent>
             </Card>
@@ -566,14 +565,14 @@ const ProgramDashboard = ({
               </CardHeader>
               <CardContent className="pt-0">
                 <p className="text-xs text-muted-foreground">
-                  Power drawn from the national grid.
+                  Imported from grid.
                 </p>
               </CardContent>
             </Card>
           </div>
         </div>
 
-        {showSystemsMap ? (
+        {showSystemsMap && mapPosition === "inline" ? (
           <SystemsMapCard
             mapFilters={{
               tehsil: activeFilters.tehsil,
@@ -596,92 +595,79 @@ const ProgramDashboard = ({
               <CardHeader>
                 <CardTitle className="text-base">Water programme</CardTitle>
                 <CardDescription>
-                  Daily tubewell entries summed by calendar month: total water
-                  volume (m³) and pump run time (h). Both can appear for the same
-                  site when operators log them. Rejected submissions are excluded;
-                  other statuses are included.
+                  Monthly totals from daily logs (m³ and pump hours).
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-8 overflow-x-auto">
                 <div>
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Water delivered (m³)
+                    Water pumped (m³) and pump run (h) — monthly
                   </p>
-                  <div className="h-[300px] min-w-[680px] w-full">
+                  <div className="h-[340px] min-w-[680px] w-full">
                     {loading ? (
                       <Skeleton className="h-full w-full" />
                     ) : (
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={waterVolumeChartData}>
+                        <ComposedChart
+                          data={waterPumpCombinedChartData}
+                          barCategoryGap={12}
+                        >
                           <CartesianGrid strokeDasharray="3 3" vertical={false} />
                           <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                           <YAxis
-                            tick={{ fontSize: 11 }}
-                            tickFormatter={(v) => formatKpiValue(Number(v))}
-                          />
-                          <Tooltip
-                            formatter={(value, name) => [
-                              `${formatTooltipNumber(Number(value ?? 0))} m³`,
-                              name === "This month"
-                                ? "This month"
-                                : "Year to date",
-                            ]}
-                          />
-                          <Legend />
-                          <Bar
-                            dataKey="monthly"
-                            name="This month"
-                            fill="#3b82f6"
-                            radius={[4, 4, 0, 0]}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="ytd"
-                            name="Year to date"
-                            stroke="#6366f1"
-                            strokeWidth={2.5}
-                            dot={false}
-                          />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Pump run time (h)
-                  </p>
-                  <div className="h-[260px] min-w-[680px] w-full">
-                    {loading ? (
-                      <Skeleton className="h-full w-full" />
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={pumpOnlyChartData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                          <YAxis
+                            yAxisId="left"
                             tick={{ fontSize: 11 }}
                             tickFormatter={(v) => formatKpiValue(Number(v))}
                             label={{
-                              value: "h",
+                              value: "m³",
                               angle: -90,
                               position: "insideLeft",
                               style: { fontSize: 11, fill: "#64748b" },
                             }}
                           />
-                          <Tooltip
-                            formatter={(value) => [
-                              `${formatTooltipNumber(Number(value ?? 0))} h`,
-                              "Pump run time",
-                            ]}
+                          <YAxis
+                            yAxisId="right"
+                            orientation="right"
+                            tick={{ fontSize: 11 }}
+                            tickFormatter={(v) => formatKpiValue(Number(v))}
+                            label={{
+                              value: "h",
+                              angle: 90,
+                              position: "insideRight",
+                              style: { fontSize: 11, fill: "#64748b" },
+                            }}
                           />
+                          <Tooltip
+                            labelFormatter={(label) =>
+                              `${String(label)} · ${activeScopeTooltip}`
+                            }
+                            formatter={(value, name) => {
+                              const n = Number(value ?? 0);
+                              if (name === "Water pumped") {
+                                return [`${formatTooltipNumber(n)} m³`, name];
+                              }
+                              if (name === "Pump run time") {
+                                return [`${formatTooltipNumber(n)} h`, name];
+                              }
+                              return [formatTooltipNumber(n), String(name)];
+                            }}
+                          />
+                          <Legend />
                           <Bar
-                            dataKey="value"
-                            fill="#0ea5e9"
-                            name="Pump run time"
+                            yAxisId="left"
+                            dataKey="waterM3"
+                            name="Water pumped"
+                            fill="#3b82f6"
                             radius={[4, 4, 0, 0]}
                           />
-                        </BarChart>
+                          <Bar
+                            yAxisId="right"
+                            dataKey="pumpH"
+                            name="Pump run time"
+                            fill="#0ea5e9"
+                            radius={[4, 4, 0, 0]}
+                          />
+                        </ComposedChart>
                       </ResponsiveContainer>
                     )}
                   </div>
@@ -693,8 +679,7 @@ const ProgramDashboard = ({
               <CardHeader>
                 <CardTitle className="text-base">Solar programme</CardTitle>
                 <CardDescription>
-                  Monthly solar energy logs: electricity exported to the grid vs
-                  drawn from the grid (same scale, kWh).
+                  Monthly energy (kWh): export vs import.
                 </CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto">
@@ -703,7 +688,7 @@ const ProgramDashboard = ({
                     <Skeleton className="h-full w-full" />
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={solarProgramChartData}>
+                      <BarChart data={solarProgramChartData} barCategoryGap={12}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                         <YAxis
@@ -717,29 +702,28 @@ const ProgramDashboard = ({
                           }}
                         />
                         <Tooltip
+                          labelFormatter={(label) =>
+                            `${String(label)} · ${activeScopeTooltip}`
+                          }
                           formatter={(value, name) => [
                             `${formatTooltipNumber(Number(value ?? 0))} kWh`,
                             String(name),
                           ]}
                         />
                         <Legend />
-                        <Line
-                          type="monotone"
+                        <Bar
                           dataKey="solarKwh"
                           name="Solar to grid"
-                          stroke="#d97706"
-                          strokeWidth={2.5}
-                          dot={{ r: 2 }}
+                          fill="#d97706"
+                          radius={[4, 4, 0, 0]}
                         />
-                        <Line
-                          type="monotone"
+                        <Bar
                           dataKey="gridKwh"
                           name="Grid power used"
-                          stroke="#ef4444"
-                          strokeWidth={2.5}
-                          dot={{ r: 2 }}
+                          fill="#ef4444"
+                          radius={[4, 4, 0, 0]}
                         />
-                      </ComposedChart>
+                      </BarChart>
                     </ResponsiveContainer>
                   )}
                 </div>
