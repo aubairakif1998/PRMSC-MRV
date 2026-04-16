@@ -38,6 +38,8 @@ import WaterSubmissionDetailsPage from "./pages/tehsil/submissions/WaterSubmissi
 import ExecutiveDashboard from "./pages/executive/ExecutiveDashboard";
 import TehsilManagerDashboard from "./pages/tehsil/dashboard/TehsilManagerDashboard";
 import LoggingCompliance from "./pages/tehsil/logging/LoggingCompliance";
+import SolarLoggingCompliancePage from "./pages/tehsil/logging/SolarLoggingCompliancePage";
+import WaterLoggingCompliancePage from "./pages/tehsil/logging/WaterLoggingCompliancePage";
 import WaterOperatorAssignments from "./pages/tehsil/operators/WaterOperatorAssignments";
 
 import SubmissionsAudit from "./pages/verification/VerificationDashboard";
@@ -286,6 +288,22 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={[...TEHSIL_MANAGER_ROLES]}>
                   <LoggingCompliance />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tehsil/logging-compliance/water"
+              element={
+                <ProtectedRoute allowedRoles={[...TEHSIL_MANAGER_ROLES]}>
+                  <WaterLoggingCompliancePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tehsil/logging-compliance/solar"
+              element={
+                <ProtectedRoute allowedRoles={[...TEHSIL_MANAGER_ROLES]}>
+                  <SolarLoggingCompliancePage />
                 </ProtectedRoute>
               }
             />
