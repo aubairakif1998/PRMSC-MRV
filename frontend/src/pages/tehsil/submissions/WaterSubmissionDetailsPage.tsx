@@ -69,6 +69,8 @@ type DetailResponse = {
     pump_operating_hours?: number | null;
     total_water_pumped?: number | null;
     bulk_meter_image_url?: string | null;
+    signed?: boolean | null;
+    signature_svg_snapshot?: string | null;
     system?: {
       id?: string | null;
       unique_identifier?: string | null;
@@ -113,6 +115,21 @@ function formatDateTime(value?: string | null) {
 function kv(v: unknown) {
   if (v === null || v === undefined || v === "") return "—";
   return String(v);
+}
+
+function fmt2(v: unknown) {
+  if (v === null || v === undefined || v === "") return "—";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  return n.toFixed(2);
+}
+
+function openSvgInNewTab(svg: string) {
+  const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  // Best-effort cleanup (tab may still be loading).
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 function statusBadge(status: string) {
@@ -209,6 +226,9 @@ export default function WaterSubmissionDetailsPage() {
   const record = data?.record_data;
   const system = record?.system;
   const audit = Array.isArray(data?.audit_trail) ? data?.audit_trail ?? [] : [];
+  const signatureSvg = record?.signature_svg_snapshot?.trim()
+    ? record.signature_svg_snapshot
+    : null;
 
   const canAct = submission?.status === "submitted";
 
@@ -263,6 +283,14 @@ export default function WaterSubmissionDetailsPage() {
                 Submission details
               </h1>
               {submission?.status ? statusBadge(submission.status) : null}
+              {record?.signed ? (
+                <Badge variant="secondary" className="gap-1">
+                  <CheckCircle2 className="size-3.5" />
+                  Signed
+                </Badge>
+              ) : (
+                <Badge variant="outline">Unsigned</Badge>
+              )}
               {submission?.id ? (
                 <Badge variant="outline" className="font-mono text-xs">
                   {submission.id.slice(0, 8).toUpperCase()}
@@ -377,7 +405,7 @@ export default function WaterSubmissionDetailsPage() {
                     Operating hours
                   </p>
                   <p className="text-base font-semibold tabular-nums">
-                    {kv(record?.pump_operating_hours)}
+                    {fmt2(record?.pump_operating_hours)}
                   </p>
                 </div>
                 <div className="space-y-1 rounded-xl border border-border/70 bg-card p-4 md:col-span-2">
@@ -403,6 +431,48 @@ export default function WaterSubmissionDetailsPage() {
                     </a>
                   ) : (
                     <p className="text-sm text-muted-foreground">No image</p>
+                  )}
+                </div>
+
+                <div className="space-y-2 rounded-xl border border-border/70 bg-card p-4 md:col-span-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Operator signature stamp
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {record?.signed ? (
+                        <Badge variant="secondary">Signed</Badge>
+                      ) : (
+                        <Badge variant="outline">Unsigned</Badge>
+                      )}
+                      {signatureSvg ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1.5 px-2 text-xs"
+                          onClick={() => openSvgInNewTab(signatureSvg)}
+                        >
+                          <ExternalLink className="size-3.5" />
+                          Open
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                  {signatureSvg ? (
+                    <div className="rounded-xl border bg-gradient-to-b from-white to-slate-50 p-3">
+                      <div
+                        className="h-36 w-full overflow-hidden rounded-lg border bg-white p-2 shadow-sm [&_svg]:h-full [&_svg]:w-full [&_svg]:max-w-none"
+                        dangerouslySetInnerHTML={{ __html: signatureSvg }}
+                      />
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        This is the signature snapshot stored on the log at submit time.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+                      No signature snapshot found for this record.
+                    </div>
                   )}
                 </div>
               </CardContent>

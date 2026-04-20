@@ -16,6 +16,7 @@ import { HomeScreen } from '../features/home/HomeScreen';
 import { AssignmentsScreen } from '../features/assignments/AssignmentsScreen';
 import { WaterLogScreen } from '../features/logging/WaterLogScreen';
 import { DraftsScreen } from '../features/drafts/DraftsScreen';
+import { SignatureScreen } from '../features/signature/SignatureScreen';
 import { MySubmissionsScreen } from '../features/submissions/MySubmissionsScreen';
 import { SubmissionDetailScreen } from '../features/submissions/SubmissionDetailScreen';
 
@@ -88,6 +89,11 @@ export function RootNavigator() {
                 name="Drafts"
                 component={DraftsScreen}
                 options={{ title: 'Saved Drafts' }}
+              />
+              <Stack.Screen
+                name="Signature"
+                component={SignatureScreen}
+                options={{ title: 'Signature' }}
               />
               <Stack.Screen
                 name="MySubmissions"

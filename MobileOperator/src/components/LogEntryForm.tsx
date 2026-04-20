@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  Switch,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -22,6 +23,7 @@ import type { RootStackParamList } from '../navigation/types'
 import { createIdempotencyKey, enqueue, isOnline } from '../offline/queue'
 import { getQueue } from '../offline/queue'
 import {
+  getMySignature,
   getWaterDraftById,
   getWaterSupplyData,
   getWaterSystems,
@@ -30,6 +32,7 @@ import {
   uploadEvidenceFile,
 } from '../api/operator'
 import { getApiErrorMessage } from '../lib/api-error'
+import { getSignatureCache, setSignatureCache } from '../lib/signature-cache'
 import { SearchablePickerModal } from './SearchablePickerModal'
 import { DatePickerField } from './DatePickerField'
 import {
@@ -134,6 +137,10 @@ function isValidTimeOfDayInput(s: string): boolean {
 
 export function LogEntryForm({ type, draftId, systemId }: Props) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const resetToHome = () => {
+    navigation.reset({ index: 0, routes: [{ name: 'Home' }] })
+  }
+
   const currentYear = new Date().getFullYear()
   /** Full calendar date for `log_date` (defaults to today). */
   const [logDateIso, setLogDateIso] = useState(() => getLocalIsoDateString())
@@ -158,6 +165,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
   const [activeDraftId, setActiveDraftId] = useState<string | null>(draftId ?? null)
   const [existingDraftImageUrl, setExistingDraftImageUrl] = useState<string | null>(null)
   const [draftImageLoadFailed, setDraftImageLoadFailed] = useState(false)
+  const [signatureChecked, setSignatureChecked] = useState(false)
   const [facilityPrefetching, setFacilityPrefetching] = useState(
     () => systemId != null && systemId !== '',
   )
@@ -446,7 +454,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
           idempotencyKey: createIdempotencyKey('water_draft'),
         })
         Alert.alert('Queued', 'No internet. Draft will be saved to the server when online.')
-        navigation.navigate('Home')
+        resetToHome()
         return
       }
       let imageUrl: string | undefined
@@ -469,7 +477,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       if (firstId) setActiveDraftId(String(firstId))
       if (imageUrl) setExistingDraftImageUrl(imageUrl)
       Alert.alert(activeDraftId ? 'Draft updated' : 'Draft saved', 'Saved to the server.')
-      navigation.navigate('Home')
+      resetToHome()
     } catch (e: unknown) {
       Alert.alert('Draft save failed', getApiErrorMessage(e, 'Please try again. Your form is still open.'))
     } finally {
@@ -503,22 +511,61 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     await saveWaterSupplyData(payload as WaterLogInput, { idempotencyKey, imageUrl })
   }
 
+  const ensureSignatureBeforeSubmit = async (): Promise<boolean> => {
+    const currentlyOnline = await isOnline().catch(() => false)
+    if (currentlyOnline) {
+      try {
+        const res = await getMySignature()
+        const ok = typeof res?.signature_svg === 'string' && res.signature_svg.trim().length > 0
+        await setSignatureCache(ok)
+        if (ok) return true
+      } catch {
+        // fall through to cache check / prompt
+      }
+    }
+    const cached = await getSignatureCache().catch(() => null)
+    const ok = Boolean(cached?.hasSignature)
+    if (ok) return true
+
+    Alert.alert(
+      'Signature required',
+      'Please add your signature before submitting. You can do it once from the menu.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Add signature',
+          onPress: () => navigation.navigate('Signature'),
+        },
+      ],
+    )
+    return false
+  }
+
   const onSubmit = async () => {
     if (!validate()) return
     setSaving(true)
     const queueItem = makeQueueItem()
     try {
+      const signedOk = await ensureSignatureBeforeSubmit()
+      if (!signedOk) return
+      if (!signatureChecked) {
+        Alert.alert(
+          'Sign required',
+          'Please tick “I sign this log” before submitting.',
+        )
+        return
+      }
       const currentlyOnline = await isOnline()
       if (!currentlyOnline) {
         await enqueue(queueItem)
         const items = await getQueue()
         setQueuedCount(items.length)
         Alert.alert('Queued', 'No internet. Submission queued and will sync later.')
-        navigation.navigate('Home')
+        resetToHome()
       } else {
         await submitOnline(queueItem.idempotencyKey ?? createIdempotencyKey(type))
         Alert.alert('Success', 'Submitted successfully.')
-        navigation.navigate('Home')
+        resetToHome()
       }
     } catch (e: unknown) {
       // Only queue when there is no connectivity. If we are online but got a server error
@@ -533,7 +580,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
             'Queued',
             `${getApiErrorMessage(e, 'Request failed.')}\n\nNo internet. Submission queued and will sync later.`,
           )
-          navigation.navigate('Home')
+          resetToHome()
         } catch {
           Alert.alert(
             'Critical error',
@@ -795,10 +842,35 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
               >
                 <Text style={[styles.submitText, styles.secondaryText]}>Save Draft</Text>
               </Pressable>
-              <Pressable style={styles.submitBtn} onPress={onSubmit} disabled={saving}>
+              <Pressable
+                style={styles.submitBtn}
+                onPress={onSubmit}
+                disabled={saving}
+              >
                 <Text style={styles.submitText}>
                   {saving ? 'Saving...' : online ? 'Submit' : 'Queue Submit'}
                 </Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.signatureBox}>
+              <View style={styles.signatureRow}>
+                <View style={styles.signatureCol}>
+                  <Text style={styles.signatureTitle}>Sign this log</Text>
+                  <Text style={styles.signatureHint}>
+                    Your saved signature will be stamped on this submission.
+                  </Text>
+                </View>
+                <Switch
+                  value={signatureChecked}
+                  onValueChange={setSignatureChecked}
+                />
+              </View>
+              <Pressable
+                onPress={() => navigation.navigate('Signature')}
+                style={({ pressed }) => [styles.signatureLink, pressed && { opacity: 0.85 }]}
+              >
+                <Text style={styles.signatureLinkText}>Manage signature</Text>
               </Pressable>
             </View>
 
@@ -953,5 +1025,19 @@ const styles = StyleSheet.create({
   secondary: { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#cbd5e1' },
   submitText: { color: '#0b1220', fontWeight: '900' },
   secondaryText: { color: '#334155' },
+  signatureBox: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
+    padding: 12,
+  },
+  signatureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  signatureCol: { flex: 1 },
+  signatureTitle: { color: '#0f172a', fontWeight: '900', fontSize: 13 },
+  signatureHint: { color: '#64748b', fontSize: 12, marginTop: 4, lineHeight: 16 },
+  signatureLink: { marginTop: 10, alignSelf: 'flex-start' },
+  signatureLinkText: { color: '#2563eb', fontWeight: '800' },
 })
 

@@ -22,7 +22,9 @@ type SubmitOptions = {
 };
 
 function isSupplyPostBody(p: unknown): p is AnyRecord {
-  return p != null && typeof p === 'object' && Array.isArray((p as AnyRecord).data);
+  return (
+    p != null && typeof p === 'object' && Array.isArray((p as AnyRecord).data)
+  );
 }
 
 /** Matches `WaterSupplyDataForm` payload: `{ data: [{ tehsil, village, settlement, monthlyData }], year, status }`. */
@@ -38,7 +40,8 @@ function buildWaterSupplyBody(
   const status = opts.status ?? 'submitted';
   const now = new Date();
   const tw =
-    input.totalWaterPumping != null && Number.isFinite(Number(input.totalWaterPumping))
+    input.totalWaterPumping != null &&
+    Number.isFinite(Number(input.totalWaterPumping))
       ? Number(input.totalWaterPumping)
       : null;
   const hasTimes =
@@ -85,7 +88,7 @@ function idempotencyHeaders(idempotencyKey?: string) {
 }
 
 export async function getWaterSystems() {
-  const res = await apiClient.get('/operator/water-systems');
+  const res = await apiClient.get('operator/water-systems');
   const raw = res.data as unknown[];
 
   // Extra safety: only expose systems assigned to this USER.
@@ -96,7 +99,7 @@ export async function getWaterSystems() {
   if (ids.length === 0) return raw;
   const allowed = new Set(ids);
 
-  return raw.filter((row) => {
+  return raw.filter(row => {
     if (!row || typeof row !== 'object') return false;
     const id = (row as Record<string, unknown>).id;
     return id != null && allowed.has(String(id));
@@ -104,23 +107,29 @@ export async function getWaterSystems() {
 }
 
 /** Fetches PDF bytes; use `react-native-share` or file save in UI if needed. */
-export async function downloadWaterReportPDF(systemId: string | number, year: string | number) {
-  const res = await apiClient.get(`/operator/water-report-pdf/${systemId}/${year}`, {
-    responseType: 'arraybuffer',
-  });
+export async function downloadWaterReportPDF(
+  systemId: string | number,
+  year: string | number,
+) {
+  const res = await apiClient.get(
+    `operator/water-report-pdf/${systemId}/${year}`,
+    {
+      responseType: 'arraybuffer',
+    },
+  );
   return res.data as ArrayBuffer;
 }
 
 export async function getMySubmissions(status?: string) {
   const params = status ? `?status=${encodeURIComponent(status)}` : '';
-  const res = await apiClient.get(`/operator/my-submissions${params}`);
+  const res = await apiClient.get(`operator/my-submissions${params}`);
   return res.data as { submissions?: Array<Record<string, unknown>> };
 }
 
 /** Full submission + record_data + audit_trail (tubewell operator’s own submission). */
 export async function getSubmissionDetail(submissionId: string) {
   const res = await apiClient.get(
-    `/operator/tubewell/submission/${encodeURIComponent(submissionId)}`,
+    `operator/tubewell/submission/${encodeURIComponent(submissionId)}`,
   );
   return res.data as {
     submission?: Record<string, unknown>;
@@ -141,11 +150,14 @@ export async function getWaterSupplyData(filters: {
     settlement: filters.settlement ?? '',
     ...(filters.year != null ? { year: String(filters.year) } : {}),
   }).toString();
-  const res = await apiClient.get(`/operator/water-supply-data?${params}`);
+  const res = await apiClient.get(`operator/water-supply-data?${params}`);
   return (res.data as unknown[]) ?? [];
 }
 
-export async function saveWaterSupplyData(payload: WaterLogInput | AnyRecord, options?: SubmitOptions) {
+export async function saveWaterSupplyData(
+  payload: WaterLogInput | AnyRecord,
+  options?: SubmitOptions,
+) {
   let body: AnyRecord;
   if (isSupplyPostBody(payload)) {
     body = { ...payload };
@@ -159,13 +171,36 @@ export async function saveWaterSupplyData(payload: WaterLogInput | AnyRecord, op
       imageUrl: options?.imageUrl,
     });
   }
-  const res = await apiClient.post('/operator/water-supply-data', body, {
+  const res = await apiClient.post('operator/water-supply-data', body, {
     headers: idempotencyHeaders(options?.idempotencyKey),
   });
   return res.data as Record<string, unknown>;
 }
 
-type SaveDraftResult = { message?: string; ids?: string[]; record_ids?: string[] };
+type SaveDraftResult = {
+  message?: string;
+  ids?: string[];
+  record_ids?: string[];
+};
+
+export async function getMySignature(): Promise<{
+  signature_svg?: string | null;
+}> {
+  const res = await apiClient.get('/operator/signature');
+  return res.data as { signature_svg?: string | null };
+}
+
+export async function saveMySignature(signatureSvg: string) {
+  const res = await apiClient.put('/operator/signature', {
+    signature_svg: signatureSvg,
+  });
+  return res.data as Record<string, unknown>;
+}
+
+export async function deleteMySignature() {
+  const res = await apiClient.delete('/operator/signature');
+  return res.data as Record<string, unknown>;
+}
 
 export type WaterDraftSummary = {
   id: string;
@@ -198,25 +233,31 @@ export type WaterDraftDetail = {
 };
 
 export async function getWaterDrafts(): Promise<WaterDraftSummary[]> {
-  const res = await apiClient.get('/operator/water-data/drafts');
+  const res = await apiClient.get('operator/water-data/drafts');
   const raw = res.data as { drafts?: unknown[] };
   return (raw?.drafts as WaterDraftSummary[]) ?? [];
 }
 
-export async function getWaterDraftById(recordId: string): Promise<WaterDraftDetail> {
+export async function getWaterDraftById(
+  recordId: string,
+): Promise<WaterDraftDetail> {
   const res = await apiClient.get(
-    `/operator/water-data/draft/${encodeURIComponent(recordId)}`,
+    `operator/water-data/draft/${encodeURIComponent(recordId)}`,
   );
   return res.data as WaterDraftDetail;
 }
 
-export async function updateWaterDraftById(recordId: string, input: WaterLogInput) {
+export async function updateWaterDraftById(
+  recordId: string,
+  input: WaterLogInput,
+) {
   const body: AnyRecord = {
     year: safeInt(input.year, new Date().getFullYear()),
     month: safeInt(input.month, new Date().getMonth() + 1),
     day: safeInt(input.day, new Date().getDate()),
     total_water_pumped:
-      input.totalWaterPumping != null && Number.isFinite(Number(input.totalWaterPumping))
+      input.totalWaterPumping != null &&
+      Number.isFinite(Number(input.totalWaterPumping))
         ? Number(input.totalWaterPumping)
         : null,
   };
@@ -227,7 +268,7 @@ export async function updateWaterDraftById(recordId: string, input: WaterLogInpu
     body.pump_end_time = input.pumpEndTime.trim();
   }
   const res = await apiClient.put(
-    `/operator/water-data/draft/${encodeURIComponent(recordId)}`,
+    `operator/water-data/draft/${encodeURIComponent(recordId)}`,
     body,
   );
   return res.data as Record<string, unknown>;
@@ -235,17 +276,20 @@ export async function updateWaterDraftById(recordId: string, input: WaterLogInpu
 
 export async function deleteWaterDraftById(recordId: string) {
   const res = await apiClient.delete(
-    `/operator/water-data/draft/${encodeURIComponent(recordId)}`,
+    `operator/water-data/draft/${encodeURIComponent(recordId)}`,
   );
   return res.data as Record<string, unknown>;
 }
 
-export async function saveWaterSupplyDraft(input: WaterLogInput, options?: SubmitOptions) {
+export async function saveWaterSupplyDraft(
+  input: WaterLogInput,
+  options?: SubmitOptions,
+) {
   const body = buildWaterSupplyBody(input, {
     status: 'draft',
     imageUrl: options?.imageUrl,
   });
-  const res = await apiClient.post('/operator/water-supply-data', body, {
+  const res = await apiClient.post('operator/water-supply-data', body, {
     headers: idempotencyHeaders(options?.idempotencyKey),
   });
   return res.data as SaveDraftResult;
@@ -264,7 +308,7 @@ export async function uploadEvidenceFile(
     type: asset.type || 'image/jpeg',
   } as unknown as Blob);
 
-  const res = await apiClient.post('/operator/upload', formData, {
+  const res = await apiClient.post('operator/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return res.data as Record<string, unknown>;

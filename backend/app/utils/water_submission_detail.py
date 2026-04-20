@@ -40,6 +40,8 @@ def build_water_submission_detail_response(submission: Submission) -> dict:
             "pump_operating_hours": record.pump_operating_hours,
             "total_water_pumped": record.total_water_pumped,
             "bulk_meter_image_url": record.bulk_meter_image_url,
+            "signed": getattr(record, "signed", False),
+            "signature_svg_snapshot": getattr(record, "signature_svg_snapshot", None),
             "system": {
                 "id": system.id if system else None,
                 "unique_identifier": system.unique_identifier if system else None,

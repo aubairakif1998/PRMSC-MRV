@@ -99,6 +99,8 @@ class User(db.Model):
     email = db.Column(db.String(150), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     phone = db.Column(db.String(20))
+    # Operator signature captured in the mobile app (stored as SVG markup string).
+    signature_svg = db.Column(db.Text)
     role_id = db.Column(db.String(36), db.ForeignKey('roles.id'), nullable=False)
     assigned_role = db.relationship(
         'Role', backref=db.backref('users', lazy='dynamic'), lazy='joined'
@@ -207,6 +209,9 @@ class WaterEnergyLoggingDaily(db.Model):
     pump_operating_hours = db.Column(db.Float)
     total_water_pumped = db.Column(db.Float)
     bulk_meter_image_url = db.Column(db.Text)
+    signed = db.Column(db.Boolean, nullable=False, default=False)
+    # Snapshot of operator signature (SVG) at time of submission.
+    signature_svg_snapshot = db.Column(db.Text)
     status = db.Column(db.String(24), default=SUBMISSION_STATUS_DRAFTED)
     remarks = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

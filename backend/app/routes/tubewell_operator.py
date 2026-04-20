@@ -61,6 +61,42 @@ from datetime import date, datetime
 tubewell_operator_bp = Blueprint("tubewell_operator", __name__)
 
 
+def _signature_payload_ok(value: str) -> bool:
+    """Basic guardrails: non-empty SVG, reasonable size."""
+    if not isinstance(value, str):
+        return False
+    v = value.strip()
+    if not v:
+        return False
+    # Prevent huge payloads (roughly 150KB of SVG markup).
+    return len(v) <= 150_000
+
+
+def _require_operator_signature(user) -> tuple[bool, tuple]:
+    """Enforce that the current tubewell operator has a saved signature."""
+    if not user or user_role_code(user) != USER:
+        return False, (jsonify({"error": "Only tubewell operators can perform this action"}), 403)
+    sig = getattr(user, "signature_svg", None)
+    if not sig or not str(sig).strip():
+        return False, (
+            jsonify(
+                {
+                    "error": "Signature required",
+                    "message": "Please add your signature before submitting a water log.",
+                }
+            ),
+            400,
+        )
+    return True, ()
+
+
+def _signature_svg_or_none(user) -> str | None:
+    sig = getattr(user, "signature_svg", None)
+    if sig and str(sig).strip():
+        return str(sig).strip()
+    return None
+
+
 @tubewell_operator_bp.route("/notifications", methods=["GET"])
 @jwt_required()
 def tubewell_get_notifications():
@@ -89,6 +125,9 @@ def submit_data_for_verification():
 
     if user_role_code(current_user) != USER:
         return jsonify({"error": "Only tubewell operators can submit data"}), 403
+    ok, err = _require_operator_signature(current_user)
+    if not ok:
+        return err
 
     data = request.get_json() or {}
     record_id = data.get("record_id")
@@ -100,6 +139,8 @@ def submit_data_for_verification():
     record = WaterEnergyLoggingDaily.query.get(record_id)
     if not record:
         return jsonify({"error": "Water data record not found"}), 404
+    record.signed = True
+    record.signature_svg_snapshot = _signature_svg_or_none(current_user)
 
     existing = Submission.query.filter_by(record_id=record_id).first()
     if existing:
@@ -218,6 +259,53 @@ def get_my_submissions():
         )
 
     return jsonify({"submissions": result})
+
+
+@tubewell_operator_bp.route("/signature", methods=["GET"])
+@jwt_required()
+@min_role_required("USER")
+def get_operator_signature():
+    """Return current user's saved signature (SVG markup)."""
+    u = UserService.get_user_by_id(get_jwt_identity())
+    if not u:
+        return jsonify({"message": "User not found"}), 404
+    if user_role_code(u) != USER:
+        return jsonify({"message": "Only tubewell operators can access signature"}), 403
+    return jsonify({"signature_svg": u.signature_svg}), 200
+
+
+@tubewell_operator_bp.route("/signature", methods=["PUT"])
+@jwt_required()
+@min_role_required("USER")
+def put_operator_signature():
+    """Create or update the current user's signature."""
+    u = UserService.get_user_by_id(get_jwt_identity())
+    if not u:
+        return jsonify({"message": "User not found"}), 404
+    if user_role_code(u) != USER:
+        return jsonify({"message": "Only tubewell operators can edit signature"}), 403
+    data = request.get_json(silent=True) or {}
+    svg = data.get("signature_svg")
+    if not _signature_payload_ok(svg):
+        return jsonify({"message": "Invalid signature_svg"}), 400
+    u.signature_svg = str(svg).strip()
+    db.session.commit()
+    return jsonify({"message": "Signature saved"}), 200
+
+
+@tubewell_operator_bp.route("/signature", methods=["DELETE"])
+@jwt_required()
+@min_role_required("USER")
+def delete_operator_signature():
+    """Delete the current user's signature."""
+    u = UserService.get_user_by_id(get_jwt_identity())
+    if not u:
+        return jsonify({"message": "User not found"}), 404
+    if user_role_code(u) != USER:
+        return jsonify({"message": "Only tubewell operators can delete signature"}), 403
+    u.signature_svg = None
+    db.session.commit()
+    return jsonify({"message": "Signature deleted"}), 200
 
 
 @tubewell_operator_bp.route("/tubewell/submission/<submission_id>", methods=["GET"])
@@ -500,6 +588,7 @@ def get_water_drafts():
                 "month": draft.log_date.month if draft.log_date else None,
                 "day": draft.log_date.day if draft.log_date else None,
                 "bulk_meter_image_url": draft.bulk_meter_image_url,
+                "signed": draft.signed,
                 "status": draft.status,
                 "created_at": draft.created_at.isoformat() if draft.created_at else None,
             }
@@ -539,6 +628,8 @@ def get_water_draft(record_id):
             "pump_operating_hours": record.pump_operating_hours,
             "total_water_pumped": record.total_water_pumped,
             "bulk_meter_image_url": record.bulk_meter_image_url,
+            "signed": record.signed,
+            "signature_svg_snapshot": record.signature_svg_snapshot,
             "status": record.status,
             "tehsil": system.tehsil if system else None,
             "village": system.village if system else None,
@@ -621,6 +712,9 @@ def submit_water_draft(record_id):
     u = UserService.get_user_by_id(current_user_id)
     if user_role_code(u) != USER:
         return jsonify({'error': 'Only tubewell operators can submit water logs'}), 403
+    ok, err = _require_operator_signature(u)
+    if not ok:
+        return err
     if record.status not in WATER_LOG_OPERATOR_EDITABLE:
         return jsonify(
             {'error': 'Only drafted or reverted_back rows can be submitted'}
@@ -633,6 +727,8 @@ def submit_water_draft(record_id):
         return jsonify({'error': 'Access denied'}), 403
 
     record.status = SUBMISSION_STATUS_SUBMITTED
+    record.signed = True
+    record.signature_svg_snapshot = _signature_svg_or_none(u)
 
     existing_sub = Submission.query.filter_by(record_id=str(record.id)).first()
     current_user = User.query.get(current_user_id)
@@ -838,6 +934,10 @@ def save_water_supply_data():
     saved_ids = []
     errors = []
     op_user = UserService.get_user_by_id(current_user_id)
+    if status == SUBMISSION_STATUS_SUBMITTED:
+        ok, err = _require_operator_signature(op_user)
+        if not ok:
+            return err
 
     for i, row in enumerate(rows):
         try:
@@ -964,6 +1064,9 @@ def save_water_supply_data():
                 if existing:
                     existing.total_water_pumped = total_water
                     existing.status = status
+                    existing.signed = status == SUBMISSION_STATUS_SUBMITTED
+                    if status == SUBMISSION_STATUS_SUBMITTED:
+                        existing.signature_svg_snapshot = _signature_svg_or_none(op_user)
                     apply_pump_time_fields_from_payload(existing, month_record)
                     if (
                         existing.pump_start_time is None or existing.pump_end_time is None
@@ -977,6 +1080,10 @@ def save_water_supply_data():
                         total_water_pumped=total_water,
                         status=status,
                         bulk_meter_image_url=image_url,
+                        signed=status == SUBMISSION_STATUS_SUBMITTED,
+                        signature_svg_snapshot=_signature_svg_or_none(op_user)
+                        if status == SUBMISSION_STATUS_SUBMITTED
+                        else None,
                     )
                     apply_pump_time_fields_from_payload(new_record, month_record)
                     if (

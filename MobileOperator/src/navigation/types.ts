@@ -13,6 +13,7 @@ export type RootStackParamList = {
   /** Assigned water systems list (entry point to logging). */
   Assignments: undefined;
   Drafts: undefined;
+  Signature: undefined;
   MySubmissions: undefined;
   SubmissionDetail: { submissionId: string };
 };

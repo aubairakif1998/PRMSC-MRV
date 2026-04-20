@@ -28,6 +28,7 @@ import {
   Inbox,
   LogOut,
   Menu,
+  PenLine,
   X,
 } from 'lucide-react-native';
 
@@ -218,7 +219,12 @@ export function AppDrawerProvider({ children }: { children: React.ReactNode }) {
                 accent="neutral"
                 onPress={() =>
                   closeDrawer(() => {
-                    if (navigationRef.isReady()) navigationRef.navigate('Home');
+                    if (navigationRef.isReady()) {
+                      navigationRef.resetRoot({
+                        index: 0,
+                        routes: [{ name: 'Home' as never }],
+                      });
+                    }
                   })
                 }
               />
@@ -261,6 +267,17 @@ export function AppDrawerProvider({ children }: { children: React.ReactNode }) {
                   closeDrawer(() => {
                     if (navigationRef.isReady())
                       navigationRef.navigate('Drafts');
+                  })
+                }
+              />
+              <DrawerNavRow
+                icon={PenLine}
+                label="Signature"
+                accent="neutral"
+                onPress={() =>
+                  closeDrawer(() => {
+                    if (navigationRef.isReady())
+                      navigationRef.navigate('Signature');
                   })
                 }
               />
