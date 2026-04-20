@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,8 +21,14 @@ import type { EvidenceAsset, LogType, QueueItem, WaterLogInput } from '../types/
 import type { RootStackParamList } from '../navigation/types'
 import { createIdempotencyKey, enqueue, isOnline } from '../offline/queue'
 import { getQueue } from '../offline/queue'
-import { deleteDraft, getDraftById, saveDraft, updateDraft } from '../offline/drafts'
-import { getWaterSupplyData, getWaterSystems, saveWaterSupplyData, uploadEvidenceFile } from '../api/operator'
+import {
+  getWaterDraftById,
+  getWaterSupplyData,
+  getWaterSystems,
+  saveWaterSupplyData,
+  saveWaterSupplyDraft,
+  uploadEvidenceFile,
+} from '../api/operator'
 import { getApiErrorMessage } from '../lib/api-error'
 import { SearchablePickerModal } from './SearchablePickerModal'
 import { DatePickerField } from './DatePickerField'
@@ -61,6 +69,12 @@ function parseIsoToYmd(iso: string): { y: number; m: number; d: number } | null 
 
 function isoFromYmd(y: number, m: number, d: number): string {
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+function normalizeRemoteImageUrl(url: string): string {
+  const u = url.trim()
+  if (u.startsWith('http://')) return `https://${u.slice('http://'.length)}`
+  return u
 }
 
 function sanitizeDecimalInput(value: string): string {
@@ -137,12 +151,17 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
   const [picker, setPicker] = useState<PickerState | null>(null)
   const [asset, setAsset] = useState<EvidenceAsset | null>(null)
   const [saving, setSaving] = useState(false)
+  const [draftSaving, setDraftSaving] = useState(false)
+  const [draftRefreshing, setDraftRefreshing] = useState(false)
   const [online, setOnline] = useState(true)
   const [queuedCount, setQueuedCount] = useState(0)
   const [activeDraftId, setActiveDraftId] = useState<string | null>(draftId ?? null)
+  const [existingDraftImageUrl, setExistingDraftImageUrl] = useState<string | null>(null)
+  const [draftImageLoadFailed, setDraftImageLoadFailed] = useState(false)
   const [facilityPrefetching, setFacilityPrefetching] = useState(
-    () => systemId != null && systemId !== '' && !draftId,
+    () => systemId != null && systemId !== '',
   )
+  const locationLocked = systemId != null && systemId !== ''
 
   const villageOptions = useMemo(() => {
     if (!tehsil) return []
@@ -188,51 +207,58 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     getQueue().then((items) => setQueuedCount(items.length)).catch(() => {})
   }, [])
 
+  const loadDraftFromServer = async (id: string) => {
+    const draft = await getWaterDraftById(id)
+    setDraftImageLoadFailed(false)
+    setExistingDraftImageUrl(
+      typeof draft.bulk_meter_image_url === 'string' && draft.bulk_meter_image_url.trim()
+        ? normalizeRemoteImageUrl(draft.bulk_meter_image_url)
+        : null,
+    )
+    const wp: WaterLogInput = {
+      year: Number(draft.year ?? currentYear),
+      month: Number(draft.month ?? new Date().getMonth() + 1),
+      day: Number(draft.day ?? new Date().getDate()),
+      tehsil: String(draft.tehsil ?? ''),
+      village: String(draft.village ?? ''),
+      settlement: draft.settlement ? String(draft.settlement) : undefined,
+      totalWaterPumping:
+        draft.total_water_pumped != null ? Number(draft.total_water_pumped) : null,
+      pumpStartTime: draft.pump_start_time ?? null,
+      pumpEndTime: draft.pump_end_time ?? null,
+    }
+    if (
+      wp.year != null &&
+      wp.month != null &&
+      wp.day != null &&
+      Number.isFinite(Number(wp.year)) &&
+      Number.isFinite(Number(wp.month)) &&
+      Number.isFinite(Number(wp.day))
+    ) {
+      setLogDateIso(isoFromYmd(Number(wp.year), Number(wp.month), Number(wp.day)))
+    } else {
+      setLogDateIso(getLocalIsoDateString())
+    }
+    setTehsil(wp.tehsil ?? '')
+    setVillage(wp.village ?? '')
+    setSettlement(wp.settlement ?? '')
+    setTotalWater(wp.totalWaterPumping != null ? String(wp.totalWaterPumping) : '')
+    setPumpStartTime(
+      wp.pumpStartTime != null ? normalizeTo24hWithSeconds(String(wp.pumpStartTime)) : '',
+    )
+    setPumpEndTime(
+      wp.pumpEndTime != null ? normalizeTo24hWithSeconds(String(wp.pumpEndTime)) : '',
+    )
+  }
+
   useEffect(() => {
     setActiveDraftId(draftId ?? null)
     if (!draftId) return
-    getDraftById(type, draftId)
-      .then((draft) => {
-        if (!draft) return
-        const p = draft.payload
-        const wp = p as WaterLogInput
-        if (
-          wp.year != null &&
-          wp.month != null &&
-          wp.day != null &&
-          Number.isFinite(Number(wp.year)) &&
-          Number.isFinite(Number(wp.month)) &&
-          Number.isFinite(Number(wp.day))
-        ) {
-          setLogDateIso(
-            isoFromYmd(Number(wp.year), Number(wp.month), Number(wp.day)),
-          )
-        } else {
-          setLogDateIso(getLocalIsoDateString())
-        }
-        setTehsil(p.tehsil ?? '')
-        setVillage(p.village ?? '')
-        setSettlement(p.settlement ?? '')
-        setTotalWater(wp.totalWaterPumping != null ? String(wp.totalWaterPumping) : '')
-        setPumpStartTime(
-          wp.pumpStartTime != null
-            ? normalizeTo24hWithSeconds(String(wp.pumpStartTime))
-            : '',
-        )
-        setPumpEndTime(
-          wp.pumpEndTime != null
-            ? normalizeTo24hWithSeconds(String(wp.pumpEndTime))
-            : '',
-        )
-      })
-      .catch(() => {})
+    loadDraftFromServer(draftId).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentYear, draftId, type])
 
   useEffect(() => {
-    if (draftId) {
-      setFacilityPrefetching(false)
-      return
-    }
     if (systemId == null || systemId === '') {
       setFacilityPrefetching(false)
       return
@@ -344,14 +370,19 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       return false
     }
     if (!tehsil || !village) {
-      Alert.alert('Validation', 'Please select tehsil and village.')
+      Alert.alert(
+        'Validation',
+        locationLocked
+          ? 'Facility location is missing. Please reopen from Assignments and try again.'
+          : 'Please select tehsil and village.',
+      )
       return false
     }
     if (settlementOptions.length > 0 && !settlement) {
       Alert.alert('Validation', 'Please select settlement.')
       return false
     }
-    if (!asset?.uri) {
+    if (!asset?.uri && !existingDraftImageUrl) {
       Alert.alert('Validation', 'Evidence image is mandatory. Please attach an image.')
       return false
     }
@@ -385,24 +416,64 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       return
     }
     if (!tehsil || !village) {
-      Alert.alert('Draft', 'Please choose tehsil and village before saving draft.')
+      Alert.alert(
+        'Draft',
+        locationLocked
+          ? 'Facility location is missing. Please reopen from Assignments and try again.'
+          : 'Please choose tehsil and village before saving draft.',
+      )
       return
     }
     if (settlementOptions.length > 0 && !settlement) {
       Alert.alert('Draft', 'Please choose settlement before saving draft.')
       return
     }
+    if (!asset?.uri && !existingDraftImageUrl) {
+      Alert.alert('Draft', 'Please attach an evidence image before saving a draft.')
+      return
+    }
+    setDraftSaving(true)
     try {
-      if (activeDraftId) {
-        await updateDraft(type, activeDraftId, payload)
-        Alert.alert('Draft updated', 'Your changes were saved.')
-      } else {
-        await saveDraft(type, payload)
-        Alert.alert('Draft saved', 'Saved locally on device.')
+      const currentlyOnline = await isOnline()
+      if (!currentlyOnline) {
+        await enqueue({
+          id: `water_draft-${Date.now()}`,
+          type: 'water_draft',
+          payload,
+          evidence: asset,
+          existingImageUrl: existingDraftImageUrl ?? undefined,
+          createdAt: new Date().toISOString(),
+          idempotencyKey: createIdempotencyKey('water_draft'),
+        })
+        Alert.alert('Queued', 'No internet. Draft will be saved to the server when online.')
+        navigation.navigate('Home')
+        return
       }
+      let imageUrl: string | undefined
+      if (asset) {
+        const up = await uploadEvidenceFile(type, asset)
+        const u = up.image_url
+        const p = up.path
+        imageUrl =
+          typeof u === 'string' && u.trim()
+            ? u.trim()
+            : typeof p === 'string' && p.trim()
+              ? p.trim()
+              : undefined
+      }
+      const res = await saveWaterSupplyDraft(payload, {
+        idempotencyKey: createIdempotencyKey('water_draft'),
+        imageUrl: imageUrl ?? (existingDraftImageUrl ?? undefined),
+      })
+      const firstId = res.record_ids?.[0]
+      if (firstId) setActiveDraftId(String(firstId))
+      if (imageUrl) setExistingDraftImageUrl(imageUrl)
+      Alert.alert(activeDraftId ? 'Draft updated' : 'Draft saved', 'Saved to the server.')
       navigation.navigate('Home')
     } catch (e: unknown) {
       Alert.alert('Draft save failed', getApiErrorMessage(e, 'Please try again. Your form is still open.'))
+    } finally {
+      setDraftSaving(false)
     }
   }
 
@@ -411,6 +482,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     type: 'water',
     payload: payload as WaterLogInput,
     evidence: asset,
+    existingImageUrl: existingDraftImageUrl ?? undefined,
     createdAt: new Date().toISOString(),
     idempotencyKey: createIdempotencyKey('water'),
   })
@@ -439,20 +511,12 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       const currentlyOnline = await isOnline()
       if (!currentlyOnline) {
         await enqueue(queueItem)
-        if (activeDraftId) {
-          await deleteDraft(type, activeDraftId)
-          setActiveDraftId(null)
-        }
         const items = await getQueue()
         setQueuedCount(items.length)
         Alert.alert('Queued', 'No internet. Submission queued and will sync later.')
         navigation.navigate('Home')
       } else {
         await submitOnline(queueItem.idempotencyKey ?? createIdempotencyKey(type))
-        if (activeDraftId) {
-          await deleteDraft(type, activeDraftId)
-          setActiveDraftId(null)
-        }
         Alert.alert('Success', 'Submitted successfully.')
         navigation.navigate('Home')
       }
@@ -463,10 +527,6 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       if (!stillOnline) {
         try {
           await enqueue(queueItem)
-          if (activeDraftId) {
-            await deleteDraft(type, activeDraftId)
-            setActiveDraftId(null)
-          }
           const items = await getQueue()
           setQueuedCount(items.length)
           Alert.alert(
@@ -498,13 +558,27 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
       <LoadingOverlay
-        visible={saving}
-        title="Submitting log…"
+        visible={saving || draftSaving}
+        title={draftSaving ? 'Saving draft…' : 'Submitting log…'}
         message="Please wait. Do not close the app."
       />
 
       <ScrollView
         style={styles.container}
+        refreshControl={
+          draftId ? (
+            <RefreshControl
+              refreshing={draftRefreshing}
+              onRefresh={() => {
+                if (!draftId) return
+                setDraftRefreshing(true)
+                loadDraftFromServer(draftId)
+                  .catch(() => {})
+                  .finally(() => setDraftRefreshing(false))
+              }}
+            />
+          ) : undefined
+        }
         contentContainerStyle={[styles.content, styles.scrollContent]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -567,40 +641,52 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
               />
             </View>
 
-            <SelectField
-              label="Tehsil"
-              value={tehsil}
-              disabled={periodLocked}
-              onPress={() =>
-                setPicker({
-                  title: 'Tehsil',
-                  key: 'tehsil',
-                  options: [...TEHSIL_OPTIONS],
-                })
-              }
-            />
+            {locationLocked ? (
+              <View style={styles.facilityBadge}>
+                <Text style={styles.facilityBadgeText}>
+                  {`Facility location: ${tehsil || '—'} · ${village || '—'}${
+                    settlement ? ` · ${settlement}` : ''
+                  }`}
+                </Text>
+              </View>
+            ) : (
+              <>
+                <SelectField
+                  label="Tehsil"
+                  value={tehsil}
+                  disabled={periodLocked}
+                  onPress={() =>
+                    setPicker({
+                      title: 'Tehsil',
+                      key: 'tehsil',
+                      options: [...TEHSIL_OPTIONS],
+                    })
+                  }
+                />
 
-            <SelectField
-              label="Village"
-              value={village}
-              disabled={periodLocked}
-              onPress={() =>
-                setPicker({ title: 'Village', key: 'village', options: villageOptions })
-              }
-            />
+                <SelectField
+                  label="Village"
+                  value={village}
+                  disabled={periodLocked}
+                  onPress={() =>
+                    setPicker({ title: 'Village', key: 'village', options: villageOptions })
+                  }
+                />
 
-            <SelectField
-              label="Settlement"
-              value={settlement}
-              disabled={periodLocked}
-              onPress={() =>
-                setPicker({
-                  title: 'Settlement',
-                  key: 'settlement',
-                  options: settlementOptions,
-                })
-              }
-            />
+                <SelectField
+                  label="Settlement"
+                  value={settlement}
+                  disabled={periodLocked}
+                  onPress={() =>
+                    setPicker({
+                      title: 'Settlement',
+                      key: 'settlement',
+                      options: settlementOptions,
+                    })
+                  }
+                />
+              </>
+            )}
 
             <Text style={[styles.helper, styles.waterMeterHint]}>
               Enter the monthly total from your water meter reading (m³). Sent as{' '}
@@ -656,6 +742,34 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
             <View style={styles.field}>
               <RequiredLabel>Bulk meter evidence (photo)</RequiredLabel>
               <Text style={styles.helper}>Upload a photo of the bulk meter.</Text>
+              {asset?.uri ? (
+                <View style={styles.existingPhotoWrap}>
+                  <Image
+                    source={{ uri: asset.uri }}
+                    style={styles.existingPhoto}
+                    resizeMode="cover"
+                  />
+                  <Text style={styles.helper}>New photo selected (will replace saved photo)</Text>
+                </View>
+              ) : existingDraftImageUrl ? (
+                <View style={styles.existingPhotoWrap}>
+                  <Image
+                    source={{ uri: existingDraftImageUrl }}
+                    style={styles.existingPhoto}
+                    resizeMode="cover"
+                    onError={() => setDraftImageLoadFailed(true)}
+                  />
+                  {draftImageLoadFailed ? (
+                    <Text style={[styles.helper, styles.photoError]}>
+                      Could not load saved photo. Tap Camera/Gallery to replace.
+                    </Text>
+                  ) : (
+                    <Text style={styles.helper}>
+                      Current saved photo (tap Camera/Gallery to replace)
+                    </Text>
+                  )}
+                </View>
+              ) : null}
               <View style={styles.row}>
                 <Pressable style={styles.actionBtn} onPress={openCamera}>
                   <Text style={styles.actionText}>Camera</Text>
@@ -667,7 +781,9 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
               <Text style={styles.helper}>
                 {asset?.fileName || asset?.uri
                   ? `New: ${asset?.fileName ?? 'image'}`
-                  : 'No image selected'}
+                  : existingDraftImageUrl
+                    ? 'Using current saved photo'
+                    : 'No image selected'}
               </Text>
             </View>
 
@@ -675,6 +791,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
               <Pressable
                 style={[styles.submitBtn, styles.secondary]}
                 onPress={onSaveDraft}
+                disabled={saving || draftSaving}
               >
                 <Text style={[styles.submitText, styles.secondaryText]}>Save Draft</Text>
               </Pressable>
@@ -685,26 +802,28 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
               </Pressable>
             </View>
 
-            <SearchablePickerModal
-              visible={Boolean(picker)}
-              title={picker?.title ?? ''}
-              options={picker?.options ?? []}
-              searchPlaceholder="Search list…"
-              onClose={() => setPicker(null)}
-              onSelect={(option) => {
-                if (!picker) return
-                if (picker.key === 'tehsil') {
-                  setTehsil(option)
-                  setVillage('')
-                  setSettlement('')
-                } else if (picker.key === 'village') {
-                  setVillage(option)
-                  setSettlement('')
-                } else {
-                  setSettlement(option)
-                }
-              }}
-            />
+            {!locationLocked ? (
+              <SearchablePickerModal
+                visible={Boolean(picker)}
+                title={picker?.title ?? ''}
+                options={picker?.options ?? []}
+                searchPlaceholder="Search list…"
+                onClose={() => setPicker(null)}
+                onSelect={(option) => {
+                  if (!picker) return
+                  if (picker.key === 'tehsil') {
+                    setTehsil(option)
+                    setVillage('')
+                    setSettlement('')
+                  } else if (picker.key === 'village') {
+                    setVillage(option)
+                    setSettlement('')
+                  } else {
+                    setSettlement(option)
+                  }
+                }}
+              />
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -816,6 +935,14 @@ const styles = StyleSheet.create({
   },
   actionText: { color: '#1d4ed8', fontWeight: '800' },
   helper: { marginTop: 6, color: '#64748b', fontSize: 12 },
+  existingPhotoWrap: { marginTop: 8, marginBottom: 8 },
+  existingPhoto: {
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    backgroundColor: '#e2e8f0',
+  },
+  photoError: { color: '#b91c1c', fontWeight: '700' },
   submitBtn: {
     flex: 1,
     alignItems: 'center',

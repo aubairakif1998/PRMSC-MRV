@@ -203,10 +203,7 @@ export function HomeScreen({ navigation }: Props) {
           </Card>
         )}
 
-        <HomeSection
-          title="My assignments"
-          hint="Water systems assigned to you. One monthly log per system and period. The log form requires year/month, location, total water (m³), pump times or operating hours, and a bulk meter photo (API: water-supply-data)."
-        >
+        <HomeSection title="My assignments" hint="">
           {assignmentsLoading ? (
             <HomeAssignmentsLoading />
           ) : assignmentsError ? (
@@ -282,7 +279,7 @@ export function HomeScreen({ navigation }: Props) {
                             })
                           }
                         >
-                          Log / Edit
+                          Log
                         </Button>
                       </View>
                     </CardContent>
@@ -300,10 +297,7 @@ export function HomeScreen({ navigation }: Props) {
           )}
         </HomeSection>
 
-        <HomeSection
-          title="Records"
-          hint="Server status and local drafts on this device."
-        >
+        <HomeSection title="Records" hint="">
           <View className="flex-row gap-2">
             <HomeTile
               icon={<Inbox color="#6d28d9" size={26} strokeWidth={2} />}

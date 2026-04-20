@@ -42,4 +42,14 @@ export type QueueItem =
       createdAt: string
       queueKey?: string
     } & QueueMeta
+  | ({
+      id: string
+      type: 'water_draft'
+      payload: WaterLogInput
+      evidence?: EvidenceAsset | null
+      /** When saving a draft update without a new photo, reuse server meter image URL. */
+      existingImageUrl?: string
+      createdAt: string
+      queueKey?: string
+    } & QueueMeta)
 

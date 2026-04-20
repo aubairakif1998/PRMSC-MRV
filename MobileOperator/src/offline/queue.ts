@@ -3,7 +3,7 @@ import NetInfo from '@react-native-community/netinfo'
 import { STORAGE_KEYS } from '../storage/keys'
 import { getJson, setJson } from '../storage/jsonStorage'
 import type { QueueItem } from '../types/operator'
-import { saveWaterSupplyData, uploadEvidenceFile } from '../api/operator'
+import { saveWaterSupplyData, saveWaterSupplyDraft, uploadEvidenceFile } from '../api/operator'
 
 type DrainQueueResult = {
   processed: number
@@ -132,7 +132,7 @@ export async function drainQueue(): Promise<DrainQueueResult> {
     try {
       let imageUrl: string | undefined
       if (item.evidence) {
-        const up = await uploadEvidenceFile(item.type, item.evidence)
+        const up = await uploadEvidenceFile('water', item.evidence)
         const u = up.image_url
         const p = up.path
         imageUrl =
@@ -151,6 +151,18 @@ export async function drainQueue(): Promise<DrainQueueResult> {
             ? item.existingImageUrl.trim()
             : undefined
         await saveWaterSupplyData(item.payload, {
+          idempotencyKey: item.idempotencyKey,
+          imageUrl: imageUrl ?? keep,
+        })
+      } else if (item.type === 'water_draft') {
+        const keep =
+          !imageUrl &&
+          'existingImageUrl' in item &&
+          typeof item.existingImageUrl === 'string' &&
+          item.existingImageUrl.trim()
+            ? item.existingImageUrl.trim()
+            : undefined
+        await saveWaterSupplyDraft(item.payload, {
           idempotencyKey: item.idempotencyKey,
           imageUrl: imageUrl ?? keep,
         })
