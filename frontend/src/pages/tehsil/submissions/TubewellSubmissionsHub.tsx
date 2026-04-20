@@ -91,6 +91,13 @@ function formatDateTime(value?: string | null) {
   });
 }
 
+function fmt2(v: unknown) {
+  if (v === null || v === undefined || v === "") return "—";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  return n.toFixed(2);
+}
+
 function statusBadge(status: TubewellSubmissionRow["status"]) {
   switch (status) {
     case "submitted":
@@ -205,7 +212,7 @@ export default function TubewellSubmissionsHub() {
 
   const loadWaterSystems = async () => {
     try {
-      const data = (await getWaterSystems()) as any;
+      const data = (await getWaterSystems({})) as any;
       const list = Array.isArray(data) ? data : [];
       setWaterSystems(list);
     } catch (e: unknown) {
@@ -632,7 +639,7 @@ export default function TubewellSubmissionsHub() {
                               )}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {r.system_info?.pump_operating_hours ?? "—"}
+                              {fmt2(r.system_info?.pump_operating_hours)}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
                               {r.system_info?.total_water_pumped ?? "—"}
