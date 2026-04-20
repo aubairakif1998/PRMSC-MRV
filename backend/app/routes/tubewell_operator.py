@@ -499,6 +499,7 @@ def get_water_drafts():
                 "year": draft.log_date.year if draft.log_date else None,
                 "month": draft.log_date.month if draft.log_date else None,
                 "day": draft.log_date.day if draft.log_date else None,
+                "bulk_meter_image_url": draft.bulk_meter_image_url,
                 "status": draft.status,
                 "created_at": draft.created_at.isoformat() if draft.created_at else None,
             }
@@ -832,6 +833,7 @@ def save_water_supply_data():
     if not rows:
         return jsonify({"message": "No data provided"}), 400
     
+    # Record ids saved/updated by this request (useful for drafts).
     saved_record_ids = []
     saved_ids = []
     errors = []
@@ -967,6 +969,7 @@ def save_water_supply_data():
                         existing.pump_start_time is None or existing.pump_end_time is None
                     ) and pump_hours is not None:
                         existing.pump_operating_hours = pump_hours
+                    saved_record_ids.append(str(existing.id))
                 else:
                     new_record = WaterEnergyLoggingDaily(
                         water_system_id=system.id,
@@ -983,6 +986,7 @@ def save_water_supply_data():
                         new_record.pump_operating_hours = pump_hours
                     db.session.add(new_record)
                     db.session.flush()
+                    saved_record_ids.append(str(new_record.id))
                 
                 if existing and image_url:
                     existing.bulk_meter_image_url = image_url
@@ -991,7 +995,6 @@ def save_water_supply_data():
                 if status == SUBMISSION_STATUS_SUBMITTED:
                     rec = existing if existing else new_record
                     record_id_to_link = str(rec.id)
-                    saved_record_ids.append(record_id_to_link)
                     existing_sub = Submission.query.filter_by(record_id=record_id_to_link).first()
                     
                     if not existing_sub:
@@ -1057,6 +1060,7 @@ def save_water_supply_data():
     db.session.commit()
     return jsonify({
         "message": f"Saved data for {len(saved_ids)} location(s) as {status}",
-        "ids": saved_ids
+        "ids": saved_ids,
+        "record_ids": saved_record_ids,
     }), 201
 
