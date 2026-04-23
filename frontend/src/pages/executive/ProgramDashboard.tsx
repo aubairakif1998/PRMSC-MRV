@@ -115,6 +115,18 @@ const ProgramDashboard = ({
 }: ProgramDashboardProps) => {
   const { user } = useAuth();
   const showSystemsMap = isExecutiveRole(user?.role);
+  const allowedTehsils = useMemo(() => {
+    const t = (user?.tehsils ?? [])
+      .map((x) => String(x).trim())
+      .filter(Boolean);
+    return t.length ? t : [...TEHSIL_OPTIONS];
+  }, [user?.tehsils]);
+  const restrictTehsils = (user?.tehsils ?? []).length > 0;
+  const initialTehsil = restrictTehsils
+    ? String(user?.tehsils?.[0] ?? "").trim() ||
+      allowedTehsils[0] ||
+      "All Tehsils"
+    : "All Tehsils";
   const {
     getDashboardProgramSummary,
     getDashboardWaterSupplied,
@@ -123,13 +135,18 @@ const ProgramDashboard = ({
     getDashboardGridImport,
   } = useProgramDashboardApi();
 
-  const [filters, setFilters] = useState({
-    tehsil: "All Tehsils",
+  const [filters, setFilters] = useState(() => ({
+    tehsil: initialTehsil,
     village: "All Villages",
     month: "All Months",
     year: "2026",
-  });
-  const [activeFilters, setActiveFilters] = useState(filters);
+  }));
+  const [activeFilters, setActiveFilters] = useState(() => ({
+    tehsil: initialTehsil,
+    village: "All Villages",
+    month: "All Months",
+    year: "2026",
+  }));
   const [summary, setSummary] = useState<SummaryData>({
     ohr_count: 0,
     solar_facilities: 0,
@@ -149,6 +166,31 @@ const ProgramDashboard = ({
       ...((LOCATION_DATA[filters.tehsil.toUpperCase()] || []) as string[]),
     ];
   }, [filters.tehsil]);
+
+  // Manager-ops scoped users: lock filters to their allowed tehsils (no "All Tehsils").
+  useEffect(() => {
+    if (!restrictTehsils) return;
+    const first = allowedTehsils[0];
+    if (!first) return;
+    setFilters((prev) => {
+      if (
+        prev.tehsil !== "All Tehsils" &&
+        allowedTehsils.includes(prev.tehsil)
+      ) {
+        return prev;
+      }
+      return { ...prev, tehsil: first, village: "All Villages" };
+    });
+    setActiveFilters((prev) => {
+      if (
+        prev.tehsil !== "All Tehsils" &&
+        allowedTehsils.includes(prev.tehsil)
+      ) {
+        return prev;
+      }
+      return { ...prev, tehsil: first, village: "All Villages" };
+    });
+  }, [allowedTehsils, restrictTehsils]);
 
   useEffect(() => {
     const load = async () => {
@@ -186,9 +228,13 @@ const ProgramDashboard = ({
 
   const activeScopeLabel = useMemo(() => {
     const tehsil =
-      activeFilters.tehsil === "All Tehsils" ? "All tehsils" : activeFilters.tehsil;
+      activeFilters.tehsil === "All Tehsils"
+        ? "All tehsils"
+        : activeFilters.tehsil;
     const village =
-      activeFilters.village === "All Villages" ? "All villages" : activeFilters.village;
+      activeFilters.village === "All Villages"
+        ? "All villages"
+        : activeFilters.village;
     const month =
       activeFilters.month === "All Months"
         ? "All months"
@@ -198,7 +244,9 @@ const ProgramDashboard = ({
 
   const activeScopeTooltip = useMemo(() => {
     const tehsilPart =
-      activeFilters.tehsil === "All Tehsils" ? "All tehsils" : activeFilters.tehsil;
+      activeFilters.tehsil === "All Tehsils"
+        ? "All tehsils"
+        : activeFilters.tehsil;
     if (activeFilters.village === "All Villages") {
       return activeFilters.tehsil === "All Tehsils"
         ? "All villages"
@@ -345,7 +393,10 @@ const ProgramDashboard = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {["All Tehsils", ...TEHSIL_OPTIONS].map((t) => (
+                {(restrictTehsils
+                  ? allowedTehsils
+                  : ["All Tehsils", ...allowedTehsils]
+                ).map((t) => (
                   <SelectItem key={t} value={t}>
                     {t}
                   </SelectItem>
@@ -444,7 +495,7 @@ const ProgramDashboard = ({
               <CardHeader className="pb-2">
                 <CardDescription className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <Building2 className="size-3.5 text-blue-600" />
-                  OHR Water Systems
+                  Tube wells registered
                 </CardDescription>
                 <CardTitle className="font-heading text-3xl tabular-nums">
                   {loading ? (
@@ -465,7 +516,7 @@ const ProgramDashboard = ({
               <CardHeader className="pb-2">
                 <CardDescription className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <Sun className="size-3.5 text-amber-600" />
-                  Solar facilities
+                  Solar sites registered
                 </CardDescription>
                 <CardTitle className="font-heading text-3xl tabular-nums">
                   {loading ? (
@@ -612,7 +663,10 @@ const ProgramDashboard = ({
                           data={waterPumpCombinedChartData}
                           barCategoryGap={12}
                         >
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            vertical={false}
+                          />
                           <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                           <YAxis
                             yAxisId="left"
@@ -688,7 +742,10 @@ const ProgramDashboard = ({
                     <Skeleton className="h-full w-full" />
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={solarProgramChartData} barCategoryGap={12}>
+                      <BarChart
+                        data={solarProgramChartData}
+                        barCategoryGap={12}
+                      >
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                         <YAxis

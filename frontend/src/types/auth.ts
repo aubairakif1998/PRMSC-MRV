@@ -19,6 +19,7 @@ export type LoginResponse = {
     name: string;
     role: string;
     tehsils?: string[] | null;
+    manager_operation_tehsils?: string[] | null;
     water_system_ids?: string[] | null;
   };
 };

@@ -3,6 +3,7 @@ import datetime
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 
+from app.models.models import UserManagerOperation
 from app.schemas.user_schema import (
     ValidationError,
     validate_change_password_payload,
@@ -28,7 +29,13 @@ def login():
         user = UserService.get_user_by_id(str(user.id)) or user
         expires = datetime.timedelta(hours=24)
         rank = user.assigned_role.hierarchy_rank if user.assigned_role else 1
-        tehsils = user.assigned_tehsils
+        # Prefer explicit manager-operation tehsil scope if present.
+        mo_tehsils = [
+            str(r.tehsil).strip()
+            for r in UserManagerOperation.query.filter_by(user_id=str(user.id)).all()
+            if str(r.tehsil).strip()
+        ]
+        tehsils = mo_tehsils if mo_tehsils else user.assigned_tehsils
         water_system_ids = user.assigned_water_system_ids
         access_token = create_access_token(
             identity=str(user.id),
@@ -49,6 +56,7 @@ def login():
                     "name": user.name,
                     "role": user.role,
                     "tehsils": tehsils,
+                    "manager_operation_tehsils": mo_tehsils,
                     "water_system_ids": water_system_ids,
                 },
             }
