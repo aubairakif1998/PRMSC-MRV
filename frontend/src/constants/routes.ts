@@ -35,6 +35,7 @@ export const tehsilRoutes = {
   solarMonthlyLogging: `${TEHSIL_BASE}/solar-monthly-logging`,
   solarMonthlyLogEdit: (recordId: string) =>
     `${TEHSIL_BASE}/solar-monthly-logging/${encodeURIComponent(recordId)}/edit`,
+  waterAlerts: `${TEHSIL_BASE}/water-alerts`,
   submissionReview: (id: string) => `${TEHSIL_BASE}/review/${id}`,
 } as const;
 

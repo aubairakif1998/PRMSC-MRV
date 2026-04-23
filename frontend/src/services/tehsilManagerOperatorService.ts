@@ -138,6 +138,12 @@ export const getDashboardGridImport = async (filters: QueryFilters = {}) => {
   return response.data;
 };
 
+/** Last-3-days anomaly scan for water logging (scoped server-side by role + tehsils). */
+export const getWaterAnomalies = async (filters: QueryFilters = {}) => {
+  const response = await api.get(`/operator/water-anomalies${buildQueryString(filters)}`);
+  return response.data;
+};
+
 export const deleteWaterSystem = async (systemId: string | number) => {
   const response = await api.delete(`/operator/water-system/${systemId}`);
   return response.data;

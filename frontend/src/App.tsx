@@ -26,6 +26,7 @@ import ChangePasswordPage from "./pages/account/ChangePassword";
 import WaterSystemForm from "./pages/tehsil/water/WaterSystemForm";
 import WaterSystemEditPage from "./pages/tehsil/water/systems/WaterSystemEditPage";
 import WaterSystems from "./pages/tehsil/water/WaterSystems";
+import WaterAlertsPage from "./pages/tehsil/water/WaterAlertsPage";
 import SolarSites from "./pages/tehsil/solar/SolarSites";
 import SolarSystemForm from "./pages/tehsil/solar/SolarSystemForm";
 import SolarSiteEditPage from "./pages/tehsil/solar/sites/SolarSiteEditPage";
@@ -243,6 +244,15 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={[...TEHSIL_MANAGER_ROLES]}>
                   <WaterSystemEditPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/tehsil/water-alerts"
+              element={
+                <ProtectedRoute allowedRoles={[...TEHSIL_MANAGER_ROLES]}>
+                  <WaterAlertsPage />
                 </ProtectedRoute>
               }
             />

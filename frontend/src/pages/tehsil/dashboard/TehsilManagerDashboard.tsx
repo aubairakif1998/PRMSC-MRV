@@ -9,6 +9,7 @@ import {
   Droplet,
   Plus,
   Sun,
+  AlertTriangle,
 } from "lucide-react";
 
 import { Badge } from "../../../components/ui/badge";
@@ -258,6 +259,32 @@ const TehsilManagerDashboard = () => {
                 Apply filters
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-slate-200 bg-white">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-base">Anomalies tracking</CardTitle>
+              <Badge variant="outline">Last 4 days</Badge>
+            </div>
+            <CardDescription>
+              Flags sudden changes in <span className="font-medium">total water pumped</span> compared to the previous
+              3‑day average.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-muted-foreground">
+              Review anomalies and see operator details for the latest log.
+            </div>
+            <Button
+              type="button"
+              onClick={() => navigate(tehsilRoutes.waterAlerts)}
+              className="gap-2"
+            >
+              <AlertTriangle className="size-4" />
+              Open anomalies
+            </Button>
           </CardContent>
         </Card>
 

@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BarChart3,
+  AlertTriangle,
   CalendarClock,
   ChevronDown,
   ClipboardList,
@@ -100,6 +101,11 @@ const MainLayout = () => {
               path: tehsilRoutes.waterLoggingCompliance,
               icon: <CalendarClock className="size-4" />,
               label: "Logging compliance",
+            },
+            {
+              path: tehsilRoutes.waterAlerts,
+              icon: <AlertTriangle className="size-4" />,
+              label: "Anomalies",
             },
           ],
         },

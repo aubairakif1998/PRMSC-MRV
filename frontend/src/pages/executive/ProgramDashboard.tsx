@@ -18,6 +18,7 @@ import { LOCATION_DATA, TEHSIL_OPTIONS } from "../../utils/locationData";
 import { useAuth } from "../../contexts/AuthContext";
 import { isExecutiveRole } from "../../constants/roles";
 import { Button } from "../../components/ui/button";
+import { Badge } from "../../components/ui/badge";
 import {
   Card,
   CardContent,
@@ -25,6 +26,12 @@ import {
   CardHeader,
   CardTitle,
 } from "../../components/ui/card";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "../../components/ui/accordion";
 import {
   Select,
   SelectContent,
@@ -46,6 +53,26 @@ type RowData = {
   pump_operating_hours?: number;
   solar_generation_kwh?: number;
   grid_import_kwh?: number;
+};
+
+type AnomalyItem = {
+  water_system: {
+    id: string;
+    unique_identifier?: string;
+    tehsil: string;
+    village: string;
+    settlement?: string | null;
+    bulk_meter_installed: boolean;
+  };
+  series: Array<{
+    date: string;
+    status?: string | null;
+    pump_operating_hours?: number | null;
+    total_water_pumped?: number | null;
+    record_id?: string | null;
+    operator?: { id: string; name: string; email: string; phone?: string | null } | null;
+  }>;
+  anomalies: Array<{ date: string; code: string; severity: string; message: string }>;
 };
 
 const YEARS = [2025, 2026, 2027, 2028, 2029];
@@ -133,6 +160,7 @@ const ProgramDashboard = ({
     getDashboardPumpHours,
     getDashboardSolarGeneration,
     getDashboardGridImport,
+    getWaterAnomalies,
   } = useProgramDashboardApi();
 
   const [filters, setFilters] = useState(() => ({
@@ -156,6 +184,7 @@ const ProgramDashboard = ({
   const [pumpHours, setPumpHours] = useState<RowData[]>([]);
   const [solarGeneration, setSolarGeneration] = useState<RowData[]>([]);
   const [gridImport, setGridImport] = useState<RowData[]>([]);
+  const [anomalyItems, setAnomalyItems] = useState<AnomalyItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -217,6 +246,17 @@ const ProgramDashboard = ({
         setPumpHours((pump || []) as RowData[]);
         setSolarGeneration((solar || []) as RowData[]);
         setGridImport((grid || []) as RowData[]);
+
+        try {
+          const anom = (await getWaterAnomalies({
+            tehsil: apiFilters.tehsil,
+            village: apiFilters.village,
+            days: 4,
+          })) as { items?: AnomalyItem[] };
+          setAnomalyItems(Array.isArray(anom?.items) ? anom.items : []);
+        } catch {
+          setAnomalyItems([]);
+        }
       } catch (err) {
         setError(getApiErrorMessage(err, "Failed to load program dashboard"));
       } finally {
@@ -636,6 +676,212 @@ const ProgramDashboard = ({
             }
           />
         ) : null}
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <CardTitle className="text-base">Anomalies tracking (last 4 days)</CardTitle>
+                <CardDescription>
+                  Flags sudden changes in <span className="font-medium">total water pumped</span> compared to the
+                  previous 3‑day average (+10% / −50%).
+                </CardDescription>
+              </div>
+              <Badge
+                variant={
+                  anomalyItems.filter((x) => (x.anomalies?.length ?? 0) > 0).length
+                    ? "destructive"
+                    : "outline"
+                }
+              >
+                {anomalyItems.filter((x) => (x.anomalies?.length ?? 0) > 0).length} anomaly(ies)
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {loading ? (
+              <Skeleton className="h-28 w-full" />
+            ) : anomalyItems.filter((x) => (x.anomalies?.length ?? 0) > 0).length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                No anomalies detected in the last 3 days for this filter.
+              </div>
+            ) : (
+              <div className="rounded-xl border border-border/70 bg-background">
+                <div className="flex items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
+                  <p className="text-sm font-semibold">Flagged systems</p>
+                  <p className="text-xs text-muted-foreground">
+                    Scroll for more · Expand a row for details
+                  </p>
+                </div>
+                <div className="max-h-[520px] overflow-y-auto p-2">
+                  <Accordion className="w-full">
+                    {anomalyItems
+                      .filter((x) => (x.anomalies?.length ?? 0) > 0)
+                      .slice(0, 40)
+                      .map((it) => {
+                    const series = Array.isArray(it.series) ? it.series : [];
+                    const anomalyDates = new Set(
+                      (it.anomalies ?? []).map((a) => String(a.date)),
+                    );
+                    const avg3ByDate = new Map<string, number>();
+                    for (let i = 3; i < series.length; i += 1) {
+                      const cur = series[i];
+                      const p1 = series[i - 1];
+                      const p2 = series[i - 2];
+                      const p3 = series[i - 3];
+                      const v1 = Number(p1?.total_water_pumped ?? NaN);
+                      const v2 = Number(p2?.total_water_pumped ?? NaN);
+                      const v3 = Number(p3?.total_water_pumped ?? NaN);
+                      if (
+                        cur?.date &&
+                        Number.isFinite(v1) &&
+                        Number.isFinite(v2) &&
+                        Number.isFinite(v3)
+                      ) {
+                        avg3ByDate.set(String(cur.date), (v1 + v2 + v3) / 3);
+                      }
+                    }
+                    const chartData = series.map((p) => ({
+                      date: p.date,
+                      pumpH: Number(p.pump_operating_hours ?? 0),
+                      waterM3: Number(p.total_water_pumped ?? 0),
+                      avg3: avg3ByDate.get(String(p.date)) ?? null,
+                      anomaly: anomalyDates.has(String(p.date)),
+                    }));
+                    const lastOp =
+                      [...series]
+                        .reverse()
+                        .find((p) => p.operator)?.operator ?? null;
+                    const title = [
+                      it.water_system.unique_identifier || it.water_system.id,
+                      it.water_system.village,
+                      it.water_system.tehsil,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
+
+                    return (
+                      <AccordionItem
+                        key={it.water_system.id}
+                        value={it.water_system.id}
+                        className="rounded-lg border border-border/70 bg-card px-3"
+                      >
+                        <AccordionTrigger className="py-3 hover:no-underline">
+                          <div className="flex w-full items-start justify-between gap-3 pr-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold">{title}</p>
+                              {lastOp ? (
+                                <p className="mt-1 truncate text-xs text-muted-foreground">
+                                  Latest operator:{" "}
+                                  <span className="font-medium text-foreground">
+                                    {lastOp.name}
+                                  </span>{" "}
+                                  · {lastOp.email}
+                                  {lastOp.phone ? ` · ${lastOp.phone}` : ""}
+                                </p>
+                              ) : (
+                                <p className="mt-1 truncate text-xs text-muted-foreground">
+                                  Latest operator: — (no submission linked yet)
+                                </p>
+                              )}
+                            </div>
+                            <Badge variant="outline" className="shrink-0 text-xs">
+                              {(it.anomalies?.length ?? 0)} anomaly(ies)
+                            </Badge>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="pb-3">
+                          <div className="grid gap-3 md:grid-cols-[1fr_360px] md:items-start">
+                            <div>
+                              <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                                {(it.anomalies ?? []).slice(0, 6).map((a, idx) => (
+                                  <li key={`${a.code}-${a.date}-${idx}`}>
+                                    <span className="font-medium text-foreground">
+                                      {a.date}
+                                    </span>
+                                    : {a.message}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                            <div className="h-[180px] w-full">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <ComposedChart
+                                  data={chartData}
+                                  margin={{ top: 10, right: 12, bottom: 6, left: 0 }}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                  <XAxis
+                                    dataKey="date"
+                                    tick={{ fontSize: 10 }}
+                                    tickFormatter={(d) => String(d).slice(5)}
+                                    interval={0}
+                                  />
+                                  <YAxis
+                                    tick={{ fontSize: 10 }}
+                                    tickFormatter={(v) => formatKpiValue(Number(v))}
+                                    width={34}
+                                  />
+                                  <Tooltip
+                                    labelFormatter={(label) => `Date: ${String(label)}`}
+                                    formatter={(value, name) => {
+                                      const n = Number(value ?? 0);
+                                      if (name === "Water pumped") {
+                                        return [`${formatTooltipNumber(n)} m³`, name];
+                                      }
+                                      if (name === "3‑day avg") {
+                                        if (!Number.isFinite(n)) return ["—", name];
+                                        return [`${formatTooltipNumber(n)} m³`, name];
+                                      }
+                                      return [formatTooltipNumber(n), String(name)];
+                                    }}
+                                  />
+                                  <Legend />
+                                  <Line
+                                    type="monotone"
+                                    dataKey="waterM3"
+                                    name="Water pumped"
+                                    stroke="#2563eb"
+                                    strokeWidth={2.25}
+                                    dot={({ cx, cy, payload }) => {
+                                      if (cx == null || cy == null) return null;
+                                      const isAnom = Boolean((payload as any)?.anomaly);
+                                      return (
+                                        <circle
+                                          cx={cx}
+                                          cy={cy}
+                                          r={4}
+                                          fill={isAnom ? "#ef4444" : "#2563eb"}
+                                          stroke="#ffffff"
+                                          strokeWidth={1.5}
+                                        />
+                                      );
+                                    }}
+                                  />
+                                  <Line
+                                    type="monotone"
+                                    dataKey="avg3"
+                                    name="3‑day avg"
+                                    stroke="#64748b"
+                                    strokeWidth={2}
+                                    strokeDasharray="5 4"
+                                    dot={false}
+                                    connectNulls={false}
+                                  />
+                                </ComposedChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
+                  </Accordion>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="space-y-3">
           <h2 className="text-base font-semibold tracking-tight text-foreground">

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta
+
 from flask import Blueprint, request, jsonify, current_app
 from app.extensions import db
 from sqlalchemy import extract
@@ -21,7 +23,7 @@ from app.models.models import (
     SUBMISSION_STATUS_REJECTED,
     SUBMISSION_STATUS_REVERTED_BACK,
 )
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from app.utils.decorators import min_role_required, tehsil_manager_required
 from app.rbac import (
     ADMIN,
@@ -65,9 +67,236 @@ from app.services.tehsil_access import (
     assert_user_may_view_or_log_water_system,
     assert_user_may_access_solar_system,
 )
-from datetime import date, datetime, timedelta
 
 tehsil_manager_bp = Blueprint("tehsil_manager", __name__)
+
+
+def _scope_tehsils_from_jwt() -> list[str]:
+    """Manager-operation accounts may have tehsil scope injected into JWT at login."""
+    try:
+        claims = get_jwt() or {}
+    except Exception:
+        claims = {}
+    raw = claims.get("tehsils")
+    if not isinstance(raw, list):
+        return []
+    return [str(t).strip() for t in raw if str(t).strip()]
+
+
+def _date_series(end_day: date, days: int) -> list[date]:
+    return [end_day - timedelta(days=i) for i in range(days - 1, -1, -1)]
+
+
+def _pct_change(a: float | None, b: float | None) -> float | None:
+    """Percent change from b -> a."""
+    if a is None or b is None:
+        return None
+    if abs(b) < 1e-9:
+        return None
+    return (a - b) / b
+
+
+@tehsil_manager_bp.route("/water-anomalies", methods=["GET"])
+@jwt_required()
+@min_role_required("ADMIN")
+def get_water_anomalies():
+    """Water anomalies using a 3-day average baseline.
+
+    Rules (per user requirement):
+    - Compare today's `total_water_pumped` to the *average of previous 3 days*.
+    - Flag anomaly if:
+      - sudden increase: today > avg * 1.10  (10%+ increase)
+      - sudden decrease: today < avg * 0.50  (50%+ decrease)
+    """
+    user = UserService.get_user_by_id(get_jwt_identity())
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    try:
+        # Need at least 4 days to compute 3-day average + current day.
+        days = int(request.args.get("days") or 4)
+    except ValueError:
+        return jsonify({"message": "days must be an integer"}), 400
+    days = max(4, min(days, 14))
+
+    end_date_s = (request.args.get("end_date") or "").strip()
+    if end_date_s:
+        try:
+            end_day = datetime.strptime(end_date_s, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"message": "Invalid end_date; use YYYY-MM-DD"}), 400
+    else:
+        end_day = date.today()
+
+    tehsil_filter = (request.args.get("tehsil") or "").strip()
+    village_filter = (request.args.get("village") or "").strip()
+
+    jwt_scope_tehsils = _scope_tehsils_from_jwt()
+    q = WaterSystem.query
+    if jwt_scope_tehsils:
+        q = q.filter(WaterSystem.tehsil.in_(jwt_scope_tehsils))
+    if tehsil_filter and tehsil_filter != "All Tehsils":
+        q = q.filter(WaterSystem.tehsil == tehsil_filter)
+    if village_filter and village_filter != "All Villages":
+        q = q.filter(WaterSystem.village == village_filter)
+
+    systems = q.order_by(
+        WaterSystem.tehsil, WaterSystem.village, WaterSystem.unique_identifier
+    ).all()
+    days_list = _date_series(end_day, days)
+
+    ws_ids = [s.id for s in systems]
+    records: list[WaterEnergyLoggingDaily] = []
+    subs: list[Submission] = []
+    if ws_ids:
+        records = (
+            WaterEnergyLoggingDaily.query.filter(
+                WaterEnergyLoggingDaily.water_system_id.in_(ws_ids),
+                WaterEnergyLoggingDaily.log_date.in_(days_list),
+            )
+            .all()
+        )
+        rec_ids = [r.id for r in records]
+        if rec_ids:
+            subs = (
+                Submission.query.filter(
+                    Submission.submission_type == "water_system",
+                    Submission.record_id.in_(rec_ids),
+                )
+                .all()
+            )
+
+    rec_by_ws_day: dict[tuple[str, date], WaterEnergyLoggingDaily] = {
+        (str(r.water_system_id), r.log_date): r for r in records
+    }
+    sub_by_rec: dict[str, Submission] = {str(s.record_id): s for s in subs}
+
+    items = []
+    for ws in systems:
+        try:
+            assert_user_may_access_tehsil(user, ws.tehsil)
+        except TehsilAccessDenied:
+            continue
+
+        series = []
+        anomalies = []
+
+        for d in days_list:
+            r = rec_by_ws_day.get((str(ws.id), d))
+            sub = sub_by_rec.get(str(r.id)) if r else None
+            op_user = sub.operator if sub else None
+
+            series.append(
+                {
+                    "date": d.isoformat(),
+                    "status": (r.status if r else None),
+                    "pump_operating_hours": (r.pump_operating_hours if r else None),
+                    "total_water_pumped": (r.total_water_pumped if r else None),
+                    "record_id": (str(r.id) if r else None),
+                    "operator": None
+                    if not op_user
+                    else {
+                        "id": str(op_user.id),
+                        "name": op_user.name,
+                        "email": op_user.email,
+                        "phone": op_user.phone or None,
+                    },
+                }
+            )
+
+            if not r:
+                anomalies.append(
+                    {
+                        "date": d.isoformat(),
+                        "code": "missing_log",
+                        "severity": "high",
+                        "message": "No daily log found for this date.",
+                    }
+                )
+                continue
+
+            if r.status == SUBMISSION_STATUS_DRAFTED:
+                anomalies.append(
+                    {
+                        "date": d.isoformat(),
+                        "code": "draft_not_submitted",
+                        "severity": "medium",
+                        "message": "Log exists but is still a draft.",
+                    }
+                )
+
+            # Volume sanity checks (only meaningful for bulk-meter systems)
+            if ws.bulk_meter_installed:
+                if r.total_water_pumped is None or (
+                    isinstance(r.total_water_pumped, (int, float))
+                    and r.total_water_pumped <= 0
+                ):
+                    anomalies.append(
+                        {
+                            "date": d.isoformat(),
+                            "code": "water_volume_missing_or_zero",
+                            "severity": "high",
+                            "message": "Bulk meter system but total water pumped is missing or zero.",
+                        }
+                    )
+
+        # 3-day moving average comparison (today vs previous 3 days avg).
+        if len(days_list) >= 4 and ws.bulk_meter_installed:
+            for idx in range(3, len(days_list)):
+                d = days_list[idx]
+                cur = rec_by_ws_day.get((str(ws.id), d))
+                if not cur or cur.total_water_pumped is None:
+                    continue
+                prev_vals = []
+                for j in range(idx - 3, idx):
+                    rprev = rec_by_ws_day.get((str(ws.id), days_list[j]))
+                    if rprev and rprev.total_water_pumped is not None:
+                        prev_vals.append(float(rprev.total_water_pumped))
+                if len(prev_vals) < 3:
+                    continue
+                avg3 = sum(prev_vals) / 3.0
+                if avg3 <= 0:
+                    continue
+                curv = float(cur.total_water_pumped)
+                if curv > avg3 * 1.10:
+                    anomalies.append(
+                        {
+                            "date": d.isoformat(),
+                            "code": "water_volume_sudden_increase_vs_3day_avg",
+                            "severity": "high",
+                            "message": f"Total water pumped {curv:.2f} is >10% above 3-day average {avg3:.2f}.",
+                            "baseline_avg_3d": avg3,
+                            "value": curv,
+                        }
+                    )
+                elif curv < avg3 * 0.50:
+                    anomalies.append(
+                        {
+                            "date": d.isoformat(),
+                            "code": "water_volume_sudden_decrease_vs_3day_avg",
+                            "severity": "high",
+                            "message": f"Total water pumped {curv:.2f} is >50% below 3-day average {avg3:.2f}.",
+                            "baseline_avg_3d": avg3,
+                            "value": curv,
+                        }
+                    )
+
+        items.append(
+            {
+                "water_system": {
+                    "id": str(ws.id),
+                    "unique_identifier": ws.unique_identifier,
+                    "tehsil": ws.tehsil,
+                    "village": ws.village,
+                    "settlement": ws.settlement or "",
+                    "bulk_meter_installed": bool(ws.bulk_meter_installed),
+                },
+                "series": series,
+                "anomalies": anomalies,
+            }
+        )
+
+    return jsonify({"end_date": end_day.isoformat(), "days": days, "items": items}), 200
 
 
 @tehsil_manager_bp.route("/logging-compliance", methods=["GET"])
