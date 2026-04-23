@@ -17,6 +17,13 @@ export type WaterSystemRow = {
   depth_of_water_intake?: number | null;
   height_to_ohr?: number | null;
   pump_flow_rate?: number | null;
+  bulk_meter_installed?: boolean | null;
+  ohr_tank_capacity?: number | null;
+  ohr_fill_required?: number | null;
+  pump_capacity?: number | null;
+  pump_head?: number | null;
+  pump_horse_power?: number | null;
+  time_to_fill?: number | null;
   meter_model?: string | null;
   meter_serial_number?: string | null;
   meter_accuracy_class?: string | null;

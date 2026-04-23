@@ -28,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
+import { Badge } from "../../../components/ui/badge";
 import { useTehsilManagerOperatorApi } from "../../../hooks";
 import { tehsilRoutes } from "../../../constants/routes";
 import { getApiErrorMessage } from "../../../lib/api-error";
@@ -66,7 +67,7 @@ export default function WaterSystems() {
     try {
       if (soft) setRefreshing(true);
       else setLoading(true);
-      const data = await getWaterSystems();
+      const data = await getWaterSystems({ page: 1, limit: 100 });
       setSystems(Array.isArray(data) ? (data as WaterSystemRow[]) : []);
     } catch (e: unknown) {
       toast.error(getApiErrorMessage(e, "Could not load water systems"));
@@ -123,7 +124,9 @@ export default function WaterSystems() {
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Water systems</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Water systems
+            </h1>
             <p className="text-sm text-muted-foreground">
               View and manage registered water systems in your tehsil scope.
             </p>
@@ -134,7 +137,9 @@ export default function WaterSystems() {
               onClick={() => void load(true)}
               disabled={refreshing}
             >
-              <RefreshCcw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+              <RefreshCcw
+                className={`size-4 ${refreshing ? "animate-spin" : ""}`}
+              />
               Refresh
             </Button>
             <Button
@@ -180,6 +185,7 @@ export default function WaterSystems() {
                       <TableHead>Village</TableHead>
                       <TableHead>Settlement</TableHead>
                       <TableHead>UID</TableHead>
+                      <TableHead>Bulk meter</TableHead>
                       <TableHead>Pump model</TableHead>
                       <TableHead>Created</TableHead>
                       <TableHead>Updated</TableHead>
@@ -190,7 +196,7 @@ export default function WaterSystems() {
                     {filtered.length === 0 ? (
                       <TableRow>
                         <TableCell
-                          colSpan={8}
+                          colSpan={9}
                           className="h-24 text-center text-muted-foreground"
                         >
                           No water systems found.
@@ -199,11 +205,20 @@ export default function WaterSystems() {
                     ) : (
                       filtered.map((s) => (
                         <TableRow key={s.id}>
-                          <TableCell className="font-medium">{kv(s.tehsil)}</TableCell>
+                          <TableCell className="font-medium">
+                            {kv(s.tehsil)}
+                          </TableCell>
                           <TableCell>{kv(s.village)}</TableCell>
                           <TableCell>{kv(s.settlement)}</TableCell>
                           <TableCell className="font-mono text-xs">
                             {kv(s.unique_identifier)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={s.bulk_meter_installed === true ? "default" : "outline"}
+                            >
+                              {s.bulk_meter_installed === true ? "Yes" : "No"}
+                            </Badge>
                           </TableCell>
                           <TableCell>{kv(s.pump_model)}</TableCell>
                           <TableCell>{formatDate(s.created_at)}</TableCell>
@@ -300,33 +315,94 @@ export default function WaterSystems() {
                   ) : (
                     <>
                       <div className="flex justify-between gap-3">
-                        <span className="text-muted-foreground">Pump model</span>
+                        <span className="text-muted-foreground">
+                          Bulk meter installed
+                        </span>
+                        <span>{detailSystem.bulk_meter_installed ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <span className="text-muted-foreground">
+                          Pump model
+                        </span>
                         <span>{kv(detailSystem.pump_model)}</span>
                       </div>
                       <div className="flex justify-between gap-3">
-                        <span className="text-muted-foreground">Pump serial</span>
+                        <span className="text-muted-foreground">
+                          Pump serial
+                        </span>
                         <span>{kv(detailSystem.pump_serial_number)}</span>
                       </div>
                       <div className="flex justify-between gap-3">
                         <span className="text-muted-foreground">Flow rate</span>
                         <span>{kv(detailSystem.pump_flow_rate)}</span>
                       </div>
-                      <div className="flex justify-between gap-3">
-                        <span className="text-muted-foreground">Meter model</span>
-                        <span>{kv(detailSystem.meter_model)}</span>
-                      </div>
-                      <div className="flex justify-between gap-3">
-                        <span className="text-muted-foreground">Meter serial</span>
-                        <span>{kv(detailSystem.meter_serial_number)}</span>
-                      </div>
-                      <div className="flex justify-between gap-3">
-                        <span className="text-muted-foreground">Accuracy class</span>
-                        <span>{kv(detailSystem.meter_accuracy_class)}</span>
-                      </div>
-                      <div className="flex justify-between gap-3">
-                        <span className="text-muted-foreground">Installation date</span>
-                        <span>{kv(detailSystem.installation_date)}</span>
-                      </div>
+                      {detailSystem.bulk_meter_installed ? (
+                        <>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Meter model
+                            </span>
+                            <span>{kv(detailSystem.meter_model)}</span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Meter serial
+                            </span>
+                            <span>{kv(detailSystem.meter_serial_number)}</span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Accuracy class
+                            </span>
+                            <span>{kv(detailSystem.meter_accuracy_class)}</span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Installation date
+                            </span>
+                            <span>{kv(detailSystem.installation_date)}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Tank capacity (OHR)
+                            </span>
+                            <span>{kv(detailSystem.ohr_tank_capacity)}</span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Required to fill tank (OHR)
+                            </span>
+                            <span>{kv(detailSystem.ohr_fill_required)}</span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Pump capacity
+                            </span>
+                            <span>{kv(detailSystem.pump_capacity)}</span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Pump head
+                            </span>
+                            <span>{kv(detailSystem.pump_head)}</span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Pump horse power (kVA/W)
+                            </span>
+                            <span>{kv(detailSystem.pump_horse_power)}</span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Time to fill
+                            </span>
+                            <span>{kv(detailSystem.time_to_fill)}</span>
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
                 </CardContent>
@@ -350,4 +426,3 @@ export default function WaterSystems() {
     </div>
   );
 }
-

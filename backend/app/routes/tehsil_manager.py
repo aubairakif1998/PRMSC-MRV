@@ -564,6 +564,45 @@ def add_water_system():
             data.get("calibration_requirement")
         )
         existing_system.installation_date = parse_date(data.get('installation_date'))
+        # Meter installed toggle + alternative fields
+        bmi = _coerce_optional_bool(data.get("bulk_meter_installed"))
+        if bmi is not None:
+            existing_system.bulk_meter_installed = bmi
+        try:
+            for k in (
+                "ohr_tank_capacity",
+                "ohr_fill_required",
+                "pump_capacity",
+                "pump_head",
+                "pump_horse_power",
+                "time_to_fill",
+            ):
+                if k in data:
+                    setattr(existing_system, k, _coerce_optional_float(data.get(k)))
+        except ValueError as exc:
+            return jsonify({"message": str(exc)}), 400
+
+        ok, err = _validate_water_system_meter_logic(
+            {
+                **data,
+                "bulk_meter_installed": existing_system.bulk_meter_installed,
+                "meter_model": existing_system.meter_model,
+                "meter_serial_number": existing_system.meter_serial_number,
+                "meter_accuracy_class": existing_system.meter_accuracy_class,
+                "calibration_requirement": existing_system.calibration_requirement,
+                "installation_date": existing_system.installation_date.isoformat()
+                if existing_system.installation_date
+                else None,
+                "ohr_tank_capacity": existing_system.ohr_tank_capacity,
+                "ohr_fill_required": existing_system.ohr_fill_required,
+                "pump_capacity": existing_system.pump_capacity,
+                "pump_head": existing_system.pump_head,
+                "pump_horse_power": existing_system.pump_horse_power,
+                "time_to_fill": existing_system.time_to_fill,
+            }
+        )
+        if not ok:
+            return jsonify({"message": err}), 400
         
         try:
             db.session.commit()
@@ -601,6 +640,13 @@ def add_water_system():
         depth_of_water_intake=to_float_or_none(data.get('depth_of_water_intake')),
         height_to_ohr=to_float_or_none(data.get('height_to_ohr')),
         pump_flow_rate=to_float_or_none(data.get('pump_flow_rate')),
+        bulk_meter_installed=_coerce_optional_bool(data.get("bulk_meter_installed")) is True,
+        ohr_tank_capacity=to_float_or_none(data.get("ohr_tank_capacity")),
+        ohr_fill_required=to_float_or_none(data.get("ohr_fill_required")),
+        pump_capacity=to_float_or_none(data.get("pump_capacity")),
+        pump_head=to_float_or_none(data.get("pump_head")),
+        pump_horse_power=to_float_or_none(data.get("pump_horse_power")),
+        time_to_fill=to_float_or_none(data.get("time_to_fill")),
         meter_model=data.get('meter_model'),
         meter_serial_number=data.get('meter_serial_number'),
         meter_accuracy_class=data.get('meter_accuracy_class'),
@@ -608,6 +654,9 @@ def add_water_system():
         installation_date=parse_date(data.get('installation_date')),
         created_by=get_jwt_identity()
     )
+    ok, err = _validate_water_system_meter_logic(data)
+    if not ok:
+        return jsonify({"message": err}), 400
     db.session.add(new_system)
     db.session.commit()
     return jsonify({"message": "Water system added successfully", "id": str(new_system.id)}), 201
@@ -750,6 +799,68 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def _coerce_optional_bool(value):
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    s = str(value).strip().lower()
+    if s in ("1", "true", "yes", "y", "on"):
+        return True
+    if s in ("0", "false", "no", "n", "off"):
+        return False
+    return None
+
+
+def _require_fields(data: dict, keys: list[str]) -> list[str]:
+    missing = []
+    for k in keys:
+        v = data.get(k)
+        if v is None:
+            missing.append(k)
+            continue
+        if isinstance(v, str) and not v.strip():
+            missing.append(k)
+    return missing
+
+
+def _validate_water_system_meter_logic(payload: dict) -> tuple[bool, str | None]:
+    """Enforce conditional required fields based on `bulk_meter_installed`."""
+    bmi = _coerce_optional_bool(payload.get("bulk_meter_installed"))
+    # If absent/null treat as not installed per requirement.
+    bulk_installed = True if bmi is True else False if bmi is False else False
+
+    if bulk_installed:
+        missing = _require_fields(
+            payload,
+            [
+                "meter_model",
+                "meter_serial_number",
+                "meter_accuracy_class",
+                "calibration_requirement",
+                "installation_date",
+            ],
+        )
+        if missing:
+            return False, f"Missing required bulk meter field(s): {', '.join(missing)}"
+        return True, None
+
+    missing = _require_fields(
+        payload,
+        [
+            "ohr_tank_capacity",
+            "ohr_fill_required",
+            "pump_capacity",
+            "pump_head",
+            "pump_horse_power",
+            "time_to_fill",
+        ],
+    )
+    if missing:
+        return False, f"Missing required no-bulk-meter field(s): {', '.join(missing)}"
+    return True, None
+
+
 
 
 
@@ -804,6 +915,11 @@ def update_water_system(system_id):
             system.pump_flow_rate = _coerce_optional_float(data.get("pump_flow_rate"))
     except ValueError as exc:
         return jsonify({"message": str(exc)}), 400
+    if "bulk_meter_installed" in data:
+        bmi = _coerce_optional_bool(data.get("bulk_meter_installed"))
+        if bmi is None:
+            return jsonify({"message": "bulk_meter_installed must be boolean"}), 400
+        system.bulk_meter_installed = bmi
     if "meter_model" in data:
         system.meter_model = _coerce_optional_str(data.get("meter_model"))
     if "meter_serial_number" in data:
@@ -816,6 +932,41 @@ def update_water_system(system_id):
         )
     if "installation_date" in data:
         system.installation_date = parse_date(data.get("installation_date"))
+    # Alternative fields for no-bulk-meter systems
+    try:
+        for k in (
+            "ohr_tank_capacity",
+            "ohr_fill_required",
+            "pump_capacity",
+            "pump_head",
+            "pump_horse_power",
+            "time_to_fill",
+        ):
+            if k in data:
+                setattr(system, k, _coerce_optional_float(data.get(k)))
+    except ValueError as exc:
+        return jsonify({"message": str(exc)}), 400
+
+    ok, err = _validate_water_system_meter_logic(
+        {
+            "bulk_meter_installed": system.bulk_meter_installed,
+            "meter_model": system.meter_model,
+            "meter_serial_number": system.meter_serial_number,
+            "meter_accuracy_class": system.meter_accuracy_class,
+            "calibration_requirement": system.calibration_requirement,
+            "installation_date": system.installation_date.isoformat()
+            if system.installation_date
+            else None,
+            "ohr_tank_capacity": system.ohr_tank_capacity,
+            "ohr_fill_required": system.ohr_fill_required,
+            "pump_capacity": system.pump_capacity,
+            "pump_head": system.pump_head,
+            "pump_horse_power": system.pump_horse_power,
+            "time_to_fill": system.time_to_fill,
+        }
+    )
+    if not ok:
+        return jsonify({"message": err}), 400
 
     try:
         db.session.commit()
@@ -865,6 +1016,13 @@ def get_water_system(system_id):
                 "depth_of_water_intake": system.depth_of_water_intake,
                 "height_to_ohr": system.height_to_ohr,
                 "pump_flow_rate": system.pump_flow_rate,
+                "bulk_meter_installed": system.bulk_meter_installed,
+                "ohr_tank_capacity": system.ohr_tank_capacity,
+                "ohr_fill_required": system.ohr_fill_required,
+                "pump_capacity": system.pump_capacity,
+                "pump_head": system.pump_head,
+                "pump_horse_power": system.pump_horse_power,
+                "time_to_fill": system.time_to_fill,
                 "meter_model": system.meter_model,
                 "meter_serial_number": system.meter_serial_number,
                 "meter_accuracy_class": system.meter_accuracy_class,

@@ -482,6 +482,7 @@ def get_water_systems():
         "latitude": getattr(s, "latitude", None),
         "longitude": getattr(s, "longitude", None),
         "pump_model": s.pump_model,
+        "bulk_meter_installed": getattr(s, "bulk_meter_installed", None),
         "created_at": s.created_at.isoformat() if s.created_at else None,
         "updated_at": s.updated_at.isoformat() if getattr(s, "updated_at", None) else None,
     } for s in systems]), 200

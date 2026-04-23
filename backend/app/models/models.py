@@ -92,6 +92,24 @@ class UserWaterSystem(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class UserManagerOperation(db.Model):
+    """Manager ↔ tehsil scope for operational oversight (seeded via migration)."""
+
+    __tablename__ = "user_manageroperation"
+
+    id = db.Column(db.String(36), primary_key=True, default=get_uuid)
+    user_id = db.Column(
+        db.String(36), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    tehsil = db.Column(db.String(100), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "tehsil", name="uq_user_manageroperation_user_tehsil"),
+    )
+
+
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.String(36), primary_key=True, default=get_uuid)
@@ -173,6 +191,14 @@ class WaterSystem(db.Model):
     depth_of_water_intake = db.Column(db.Float)
     height_to_ohr = db.Column(db.Float)
     pump_flow_rate = db.Column(db.Float)
+    bulk_meter_installed = db.Column(db.Boolean, nullable=False, default=True)
+    # No bulk meter installed: capture design/assumption inputs.
+    ohr_tank_capacity = db.Column(db.Float)  # m³
+    ohr_fill_required = db.Column(db.Float)  # m³ required to fill OHR
+    pump_capacity = db.Column(db.Float)  # (unit as entered by tehsil manager)
+    pump_head = db.Column(db.Float)  # meters
+    pump_horse_power = db.Column(db.Float)  # HP / kVA / W as entered (numeric)
+    time_to_fill = db.Column(db.Float)  # minutes
     meter_model = db.Column(db.String(100))
     meter_serial_number = db.Column(db.String(100))
     meter_accuracy_class = db.Column(db.String(50))

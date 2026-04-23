@@ -92,6 +92,13 @@ const WaterSystemForm = () => {
     depth_of_water_intake: "",
     height_to_ohr: "",
     pump_flow_rate: "",
+    bulk_meter_installed: true,
+    ohr_tank_capacity: "",
+    ohr_fill_required: "",
+    pump_capacity: "",
+    pump_head: "",
+    pump_horse_power: "",
+    time_to_fill: "",
     meter_model: "",
     meter_serial_number: "",
     meter_accuracy_class: "",
@@ -211,26 +218,29 @@ const WaterSystemForm = () => {
     Array<keyof typeof formData>
   > = {
     1: ["tehsil", "village"],
-    2: [
-      "pump_model",
-      "pump_serial_number",
-      "pump_flow_rate",
-      "installation_date",
-      "start_of_operation",
-    ],
-    3: ["meter_model", "meter_serial_number", "meter_accuracy_class"],
+    2: ["pump_model", "pump_serial_number", "pump_flow_rate", "start_of_operation"],
+    3: ["bulk_meter_installed"],
   };
 
-  const FIELD_LABELS: Record<keyof typeof formData, string> = {
+  const FIELD_LABELS: Record<string, string> = {
     tehsil: "Tehsil",
     village: "Village",
     settlement: "Settlement",
+    latitude: "Latitude",
+    longitude: "Longitude",
     pump_model: "Pump Model",
     pump_serial_number: "Pump Serial Number",
     start_of_operation: "Operation Start",
     depth_of_water_intake: "Intake Depth",
     height_to_ohr: "Height to OHR",
     pump_flow_rate: "Flow Rate",
+    bulk_meter_installed: "Bulk meter installed",
+    ohr_tank_capacity: "Tank capacity (OHR)",
+    ohr_fill_required: "Required to fill tank (OHR)",
+    pump_capacity: "Pump capacity",
+    pump_head: "Pump head",
+    pump_horse_power: "Pump horse power (kVA/W)",
+    time_to_fill: "Time to fill",
     meter_model: "Meter Model",
     meter_serial_number: "Meter Serial Number",
     meter_accuracy_class: "Accuracy Class",
@@ -240,9 +250,31 @@ const WaterSystemForm = () => {
 
   const validateStep = (stepToValidate: number) => {
     const requiredFields = REQUIRED_FIELDS_BY_STEP[stepToValidate] ?? [];
-    const missing = requiredFields.filter(
-      (field) => !String(formData[field]).trim(),
-    );
+    const conditionalRequired =
+      stepToValidate === 3
+        ? formData.bulk_meter_installed
+          ? ([
+              "meter_model",
+              "meter_serial_number",
+              "meter_accuracy_class",
+              "calibration_requirement",
+              "installation_date",
+            ] as Array<keyof typeof formData>)
+          : ([
+              "ohr_tank_capacity",
+              "ohr_fill_required",
+              "pump_capacity",
+              "pump_head",
+              "pump_horse_power",
+              "time_to_fill",
+            ] as Array<keyof typeof formData>)
+        : [];
+    const allRequired = [...requiredFields, ...conditionalRequired];
+    const missing = allRequired.filter((field) => {
+      const v = formData[field];
+      if (typeof v === "boolean") return false;
+      return !String(v).trim();
+    });
 
     if (missing.length === 0) return true;
 
@@ -546,20 +578,6 @@ const WaterSystemForm = () => {
                 </div>
                 <div className="space-y-2">
                   <Label>
-                    Installation date
-                    <RequiredMark />
-                  </Label>
-                  <Input
-                    type="date"
-                    name="installation_date"
-                    value={formData.installation_date}
-                    onChange={handleChange}
-                    className="h-11"
-                    disabled={loading}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>
                     Operation start
                     <RequiredMark />
                   </Label>
@@ -577,62 +595,207 @@ const WaterSystemForm = () => {
 
             {activeStep === 3 ? (
               <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>
-                      Meter model
-                      <RequiredMark />
-                    </Label>
-                    <Input
-                      name="meter_model"
-                      value={formData.meter_model}
-                      onChange={handleChange}
-                      className="h-11"
-                      disabled={loading}
-                    />
+                <div className="rounded-xl border border-border/70 bg-card p-4">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <Label className="text-sm font-semibold">
+                        Bulk meter installed? <RequiredMark />
+                      </Label>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Choose <span className="font-semibold">Yes</span> if a bulk
+                        meter is installed; otherwise choose{" "}
+                        <span className="font-semibold">No</span>.
+                      </p>
+                    </div>
+                    <div className="inline-flex w-fit overflow-hidden rounded-lg border">
+                      <Button
+                        type="button"
+                        variant={formData.bulk_meter_installed ? "default" : "ghost"}
+                        className="rounded-none px-5"
+                        onClick={() =>
+                          setFormData((p) => ({ ...p, bulk_meter_installed: true }))
+                        }
+                        disabled={loading}
+                      >
+                        Yes
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={!formData.bulk_meter_installed ? "default" : "ghost"}
+                        className="rounded-none px-5"
+                        onClick={() =>
+                          setFormData((p) => ({ ...p, bulk_meter_installed: false }))
+                        }
+                        disabled={loading}
+                      >
+                        No
+                      </Button>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>
-                      Meter serial number
-                      <RequiredMark />
-                    </Label>
-                    <Input
-                      name="meter_serial_number"
-                      value={formData.meter_serial_number}
-                      onChange={handleChange}
-                      className="h-11"
-                      disabled={loading}
-                    />
+                </div>
+
+                {!formData.bulk_meter_installed ? (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>
+                        Tank capacity (OHR) <RequiredMark />
+                      </Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        name="ohr_tank_capacity"
+                        value={formData.ohr_tank_capacity}
+                        onChange={handleChange}
+                        className="h-11"
+                        placeholder="e.g. 10"
+                        disabled={loading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>
+                        Required to fill tank (OHR) <RequiredMark />
+                      </Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        name="ohr_fill_required"
+                        value={formData.ohr_fill_required}
+                        onChange={handleChange}
+                        className="h-11"
+                        placeholder="e.g. 10"
+                        disabled={loading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>
+                        Pump capacity <RequiredMark />
+                      </Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        name="pump_capacity"
+                        value={formData.pump_capacity}
+                        onChange={handleChange}
+                        className="h-11"
+                        placeholder="e.g. 5"
+                        disabled={loading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>
+                        Pump head <RequiredMark />
+                      </Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        name="pump_head"
+                        value={formData.pump_head}
+                        onChange={handleChange}
+                        className="h-11"
+                        placeholder="e.g. 40"
+                        disabled={loading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>
+                        Pump horse power (kVA/W) <RequiredMark />
+                      </Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        name="pump_horse_power"
+                        value={formData.pump_horse_power}
+                        onChange={handleChange}
+                        className="h-11"
+                        placeholder="e.g. 7.5"
+                        disabled={loading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>
+                        Time to fill (minutes) <RequiredMark />
+                      </Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        name="time_to_fill"
+                        value={formData.time_to_fill}
+                        onChange={handleChange}
+                        className="h-11"
+                        placeholder="e.g. 60"
+                        disabled={loading}
+                      />
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>
-                    Accuracy class
-                    <RequiredMark />
-                  </Label>
-                  <Input
-                    name="meter_accuracy_class"
-                    value={formData.meter_accuracy_class}
-                    onChange={handleChange}
-                    placeholder="e.g. Class B"
-                    className="h-11"
-                    disabled={loading}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Calibration notes</Label>
-                  <Textarea
-                    name="calibration_requirement"
-                    value={formData.calibration_requirement}
-                    onChange={handleChange}
-                    placeholder="Frequency, last calibration, etc."
-                    className="min-h-24 resize-none"
-                    disabled={loading}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Optional but recommended for audit readiness.
-                  </p>
-                </div>
+                ) : (
+                  <>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>
+                          Installation date <RequiredMark />
+                        </Label>
+                        <Input
+                          type="date"
+                          name="installation_date"
+                          value={formData.installation_date}
+                          onChange={handleChange}
+                          className="h-11"
+                          disabled={loading}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>
+                          Meter model <RequiredMark />
+                        </Label>
+                        <Input
+                          name="meter_model"
+                          value={formData.meter_model}
+                          onChange={handleChange}
+                          className="h-11"
+                          disabled={loading}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>
+                          Meter serial number <RequiredMark />
+                        </Label>
+                        <Input
+                          name="meter_serial_number"
+                          value={formData.meter_serial_number}
+                          onChange={handleChange}
+                          className="h-11"
+                          disabled={loading}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>
+                          Accuracy class <RequiredMark />
+                        </Label>
+                        <Input
+                          name="meter_accuracy_class"
+                          value={formData.meter_accuracy_class}
+                          onChange={handleChange}
+                          placeholder="e.g. Class B"
+                          className="h-11"
+                          disabled={loading}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>
+                        Calibration notes <RequiredMark />
+                      </Label>
+                      <Textarea
+                        name="calibration_requirement"
+                        value={formData.calibration_requirement}
+                        onChange={handleChange}
+                        placeholder="Frequency, last calibration, etc."
+                        className="min-h-24 resize-none"
+                        disabled={loading}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             ) : null}
 

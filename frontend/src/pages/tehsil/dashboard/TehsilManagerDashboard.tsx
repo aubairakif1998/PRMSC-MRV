@@ -180,14 +180,14 @@ const TehsilManagerDashboard = () => {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <StatsCard
-            title="OHR / water systems"
+            title="Tube wells registered"
             value={safeSummary.ohr_count}
             desc="In selected scope"
             icon={<Building className="size-5 text-blue-600" />}
             loading={statsLoading}
           />
           <StatsCard
-            title="Solar facilities"
+            title="Solar sites registered"
             value={safeSummary.solar_facilities}
             desc="PV sites in scope"
             icon={<Sun className="size-5 text-amber-600" />}

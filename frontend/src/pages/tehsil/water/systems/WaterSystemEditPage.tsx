@@ -54,6 +54,13 @@ export default function WaterSystemEditPage() {
     depth_of_water_intake: "",
     height_to_ohr: "",
     pump_flow_rate: "",
+    bulk_meter_installed: true,
+    ohr_tank_capacity: "",
+    ohr_fill_required: "",
+    pump_capacity: "",
+    pump_head: "",
+    pump_horse_power: "",
+    time_to_fill: "",
     meter_model: "",
     meter_serial_number: "",
     meter_accuracy_class: "",
@@ -109,6 +116,13 @@ export default function WaterSystemEditPage() {
         depth_of_water_intake: String(detail.depth_of_water_intake ?? ""),
         height_to_ohr: String(detail.height_to_ohr ?? ""),
         pump_flow_rate: String(detail.pump_flow_rate ?? ""),
+        bulk_meter_installed: Boolean(detail.bulk_meter_installed),
+        ohr_tank_capacity: String(detail.ohr_tank_capacity ?? ""),
+        ohr_fill_required: String(detail.ohr_fill_required ?? ""),
+        pump_capacity: String(detail.pump_capacity ?? ""),
+        pump_head: String(detail.pump_head ?? ""),
+        pump_horse_power: String(detail.pump_horse_power ?? ""),
+        time_to_fill: String(detail.time_to_fill ?? ""),
         meter_model: String(detail.meter_model ?? ""),
         meter_serial_number: String(detail.meter_serial_number ?? ""),
         meter_accuracy_class: String(detail.meter_accuracy_class ?? ""),
@@ -131,15 +145,28 @@ export default function WaterSystemEditPage() {
 
   const canSave = useMemo(() => {
     if (!isResolved) return false;
-    return (
+    const baseOk =
       formData.pump_model.trim() &&
       formData.pump_serial_number.trim() &&
       formData.pump_flow_rate.trim() &&
-      formData.installation_date.trim() &&
-      formData.start_of_operation.trim() &&
-      formData.meter_model.trim() &&
-      formData.meter_serial_number.trim() &&
-      formData.meter_accuracy_class.trim()
+      formData.start_of_operation.trim();
+    if (!baseOk) return false;
+    if (formData.bulk_meter_installed) {
+      return (
+        formData.installation_date.trim() &&
+        formData.meter_model.trim() &&
+        formData.meter_serial_number.trim() &&
+        formData.meter_accuracy_class.trim() &&
+        formData.calibration_requirement.trim()
+      );
+    }
+    return (
+      formData.ohr_tank_capacity.trim() &&
+      formData.ohr_fill_required.trim() &&
+      formData.pump_capacity.trim() &&
+      formData.pump_head.trim() &&
+      formData.pump_horse_power.trim() &&
+      formData.time_to_fill.trim()
     );
   }, [formData, isResolved]);
 
@@ -322,17 +349,6 @@ export default function WaterSystemEditPage() {
               </div>
               <div className="space-y-2">
                 <Label>
-                  Installation date<RequiredMark />
-                </Label>
-                <Input
-                  type="date"
-                  value={formData.installation_date}
-                  onChange={onChange("installation_date")}
-                  disabled={saving || !isResolved}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>
                   Operation start<RequiredMark />
                 </Label>
                 <Input
@@ -346,46 +362,177 @@ export default function WaterSystemEditPage() {
 
             <Separator />
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>
-                  Meter model<RequiredMark />
-                </Label>
-                <Input
-                  value={formData.meter_model}
-                  onChange={onChange("meter_model")}
-                  disabled={saving || !isResolved}
-                />
+            <div className="space-y-4">
+              <div className="rounded-xl border border-border/70 bg-card p-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <Label className="text-sm font-semibold">
+                      Bulk meter installed? <RequiredMark />
+                    </Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Choose <span className="font-semibold">Yes</span> if a bulk
+                      meter is installed; otherwise choose{" "}
+                      <span className="font-semibold">No</span>.
+                    </p>
+                  </div>
+                  <div className="inline-flex w-fit overflow-hidden rounded-lg border">
+                    <Button
+                      type="button"
+                      variant={formData.bulk_meter_installed ? "default" : "ghost"}
+                      className="rounded-none px-5"
+                      onClick={() =>
+                        setFormData((p) => ({ ...p, bulk_meter_installed: true }))
+                      }
+                      disabled={saving || !isResolved}
+                    >
+                      Yes
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={!formData.bulk_meter_installed ? "default" : "ghost"}
+                      className="rounded-none px-5"
+                      onClick={() =>
+                        setFormData((p) => ({ ...p, bulk_meter_installed: false }))
+                      }
+                      disabled={saving || !isResolved}
+                    >
+                      No
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>
-                  Meter serial number<RequiredMark />
-                </Label>
-                <Input
-                  value={formData.meter_serial_number}
-                  onChange={onChange("meter_serial_number")}
-                  disabled={saving || !isResolved}
-                />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label>
-                  Accuracy class<RequiredMark />
-                </Label>
-                <Input
-                  value={formData.meter_accuracy_class}
-                  onChange={onChange("meter_accuracy_class")}
-                  disabled={saving || !isResolved}
-                />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label>Calibration notes</Label>
-                <Textarea
-                  value={formData.calibration_requirement}
-                  onChange={onChange("calibration_requirement")}
-                  disabled={saving || !isResolved}
-                  className="min-h-24 resize-none"
-                />
-              </div>
+
+              {!formData.bulk_meter_installed ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>
+                      Tank capacity (OHR)<RequiredMark />
+                    </Label>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      value={formData.ohr_tank_capacity}
+                      onChange={onChange("ohr_tank_capacity")}
+                      disabled={saving || !isResolved}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Required to fill tank (OHR)<RequiredMark />
+                    </Label>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      value={formData.ohr_fill_required}
+                      onChange={onChange("ohr_fill_required")}
+                      disabled={saving || !isResolved}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Pump capacity<RequiredMark />
+                    </Label>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      value={formData.pump_capacity}
+                      onChange={onChange("pump_capacity")}
+                      disabled={saving || !isResolved}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Pump head<RequiredMark />
+                    </Label>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      value={formData.pump_head}
+                      onChange={onChange("pump_head")}
+                      disabled={saving || !isResolved}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Pump horse power (kVA/W)<RequiredMark />
+                    </Label>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      value={formData.pump_horse_power}
+                      onChange={onChange("pump_horse_power")}
+                      disabled={saving || !isResolved}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Time to fill (minutes)<RequiredMark />
+                    </Label>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      value={formData.time_to_fill}
+                      onChange={onChange("time_to_fill")}
+                      disabled={saving || !isResolved}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>
+                      Installation date<RequiredMark />
+                    </Label>
+                    <Input
+                      type="date"
+                      value={formData.installation_date}
+                      onChange={onChange("installation_date")}
+                      disabled={saving || !isResolved}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Meter model<RequiredMark />
+                    </Label>
+                    <Input
+                      value={formData.meter_model}
+                      onChange={onChange("meter_model")}
+                      disabled={saving || !isResolved}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Meter serial number<RequiredMark />
+                    </Label>
+                    <Input
+                      value={formData.meter_serial_number}
+                      onChange={onChange("meter_serial_number")}
+                      disabled={saving || !isResolved}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Accuracy class<RequiredMark />
+                    </Label>
+                    <Input
+                      value={formData.meter_accuracy_class}
+                      onChange={onChange("meter_accuracy_class")}
+                      disabled={saving || !isResolved}
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>
+                      Calibration notes<RequiredMark />
+                    </Label>
+                    <Textarea
+                      value={formData.calibration_requirement}
+                      onChange={onChange("calibration_requirement")}
+                      disabled={saving || !isResolved}
+                      className="min-h-24 resize-none"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <Separator />
