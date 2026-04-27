@@ -863,8 +863,8 @@ def add_water_system():
         unique_identifier=unique_id,
         latitude=to_float_or_none(data.get("latitude")),
         longitude=to_float_or_none(data.get("longitude")),
-        pump_model=data.get('pump_model'),
-        pump_serial_number=data.get('pump_serial_number'),
+        pump_model=_coerce_optional_str(data.get("pump_model")),
+        pump_serial_number=_coerce_optional_str(data.get("pump_serial_number")),
         start_of_operation=parse_date(data.get('start_of_operation')),
         depth_of_water_intake=to_float_or_none(data.get('depth_of_water_intake')),
         height_to_ohr=to_float_or_none(data.get('height_to_ohr')),
@@ -1023,8 +1023,12 @@ def submit_solar_data():
         solar_system_id=data.get('solar_system_id'),
         year=data.get('year'),
         month=data.get('month'),
-        energy_consumed_from_grid=data.get('energy_consumed_from_grid'),
-        energy_exported_to_grid=data.get('energy_exported_to_grid'),
+        export_off_peak=data.get("export_off_peak"),
+        export_peak=data.get("export_peak"),
+        import_off_peak=data.get("import_off_peak"),
+        import_peak=data.get("import_peak"),
+        net_off_peak=data.get("net_off_peak"),
+        net_peak=data.get("net_peak"),
     )
     db.session.add(new_record)
     db.session.commit()
@@ -1693,8 +1697,12 @@ def get_solar_supply_data():
                 "id": str(r.id),
                 "year": r.year,
                 "month": r.month,
-                "energy_consumed_from_grid": r.energy_consumed_from_grid,
-                "energy_exported_to_grid": r.energy_exported_to_grid,
+                "export_off_peak": r.export_off_peak,
+                "export_peak": r.export_peak,
+                "import_off_peak": r.import_off_peak,
+                "import_peak": r.import_peak,
+                "net_off_peak": r.net_off_peak,
+                "net_peak": r.net_peak,
                 "remarks": r.remarks,
                 "electricity_bill_image_url": r.electricity_bill_image_url,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
@@ -1730,8 +1738,12 @@ def get_solar_supply_data_record(record_id):
                 "settlement": system.settlement or "",
                 "year": record.year,
                 "month": record.month,
-                "energy_consumed_from_grid": record.energy_consumed_from_grid,
-                "energy_exported_to_grid": record.energy_exported_to_grid,
+                "export_off_peak": record.export_off_peak,
+                "export_peak": record.export_peak,
+                "import_off_peak": record.import_off_peak,
+                "import_peak": record.import_peak,
+                "net_off_peak": record.net_off_peak,
+                "net_peak": record.net_peak,
                 "remarks": record.remarks,
                 "electricity_bill_image_url": record.electricity_bill_image_url,
                 "created_at": record.created_at.isoformat() if record.created_at else None,
@@ -1763,14 +1775,16 @@ def update_solar_supply_data_record(record_id):
 
     data = request.get_json() or {}
     try:
-        if "energy_consumed_from_grid" in data:
-            record.energy_consumed_from_grid = _coerce_optional_float(
-                data.get("energy_consumed_from_grid")
-            )
-        if "energy_exported_to_grid" in data:
-            record.energy_exported_to_grid = _coerce_optional_float(
-                data.get("energy_exported_to_grid")
-            )
+        for k in (
+            "export_off_peak",
+            "export_peak",
+            "import_off_peak",
+            "import_peak",
+            "net_off_peak",
+            "net_peak",
+        ):
+            if k in data:
+                setattr(record, k, _coerce_optional_float(data.get(k)))
     except ValueError as exc:
         return jsonify({"message": str(exc)}), 400
 
@@ -1881,12 +1895,20 @@ def save_solar_supply_data():
             for month_record in monthly_data:
                 month = month_record.get('month')
                 try:
-                    energy_consumed = _coerce_optional_float(
-                        month_record.get("energy_consumed_from_grid")
+                    export_off_peak = _coerce_optional_float(
+                        month_record.get("export_off_peak")
                     )
-                    energy_exported = _coerce_optional_float(
-                        month_record.get("energy_exported_to_grid")
+                    export_peak = _coerce_optional_float(
+                        month_record.get("export_peak")
                     )
+                    import_off_peak = _coerce_optional_float(
+                        month_record.get("import_off_peak")
+                    )
+                    import_peak = _coerce_optional_float(
+                        month_record.get("import_peak")
+                    )
+                    net_off_peak = _coerce_optional_float(month_record.get("net_off_peak"))
+                    net_peak = _coerce_optional_float(month_record.get("net_peak"))
                 except ValueError as exc:
                     errors.append(
                         f"Row {i+1}, month {month_record.get('month')}: {exc}"
@@ -1901,8 +1923,12 @@ def save_solar_supply_data():
                 ).first()
 
                 if existing:
-                    existing.energy_consumed_from_grid = energy_consumed
-                    existing.energy_exported_to_grid = energy_exported
+                    existing.export_off_peak = export_off_peak
+                    existing.export_peak = export_peak
+                    existing.import_off_peak = import_off_peak
+                    existing.import_peak = import_peak
+                    existing.net_off_peak = net_off_peak
+                    existing.net_peak = net_peak
                     if "remarks" in month_record:
                         existing.remarks = month_record.get("remarks")
                     if image_url and (existing.electricity_bill_image_url or "") != str(
@@ -1917,8 +1943,12 @@ def save_solar_supply_data():
                         solar_system_id=system.id,
                         year=year,
                         month=month,
-                        energy_consumed_from_grid=energy_consumed,
-                        energy_exported_to_grid=energy_exported,
+                        export_off_peak=export_off_peak,
+                        export_peak=export_peak,
+                        import_off_peak=import_off_peak,
+                        import_peak=import_peak,
+                        net_off_peak=net_off_peak,
+                        net_peak=net_peak,
                         electricity_bill_image_url=str(image_url).strip()
                         if image_url
                         else None,

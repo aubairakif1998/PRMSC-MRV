@@ -263,12 +263,12 @@ export default function SolarMonthlyLogging() {
                         <TableHead>Settlement</TableHead>
                         <TableHead>Year</TableHead>
                         <TableHead>Month</TableHead>
-                        <TableHead className="text-right">
-                          Import (kWh)
-                        </TableHead>
-                        <TableHead className="text-right">
-                          Export (kWh)
-                        </TableHead>
+                        <TableHead className="text-right">Import off-peak</TableHead>
+                        <TableHead className="text-right">Import peak</TableHead>
+                        <TableHead className="text-right">Export off-peak</TableHead>
+                        <TableHead className="text-right">Export peak</TableHead>
+                        <TableHead className="text-right">Net off-peak</TableHead>
+                        <TableHead className="text-right">Net peak</TableHead>
                         <TableHead className="min-w-[140px]">Remarks</TableHead>
                         <TableHead>Bill</TableHead>
                         <TableHead>Created</TableHead>
@@ -282,7 +282,7 @@ export default function SolarMonthlyLogging() {
                       {filtered.length === 0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={12}
+                            colSpan={16}
                             className="h-28 text-center text-muted-foreground"
                           >
                             No monthly logs for {year}. Use{" "}
@@ -307,10 +307,22 @@ export default function SolarMonthlyLogging() {
                               {MONTH_NAMES[r.month] ?? r.month}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {formatNum(r.energy_consumed_from_grid)}
+                              {formatNum(r.import_off_peak)}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {formatNum(r.energy_exported_to_grid)}
+                              {formatNum(r.import_peak)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatNum(r.export_off_peak)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatNum(r.export_peak)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatNum(r.net_off_peak)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatNum(r.net_peak)}
                             </TableCell>
                             <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground" title={r.remarks ?? ""}>
                               {r.remarks?.trim() ? r.remarks : "—"}

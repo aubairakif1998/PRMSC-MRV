@@ -70,8 +70,12 @@ export type SolarMonthlySupplyListItem = {
   id: string;
   year: number;
   month: number;
-  energy_consumed_from_grid?: number | null;
-  energy_exported_to_grid?: number | null;
+  export_off_peak?: number | null;
+  export_peak?: number | null;
+  import_off_peak?: number | null;
+  import_peak?: number | null;
+  net_off_peak?: number | null;
+  net_peak?: number | null;
   remarks?: string | null;
   electricity_bill_image_url?: string | null;
   created_at?: string | null;

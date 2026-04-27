@@ -10,6 +10,7 @@ import {
   Send,
   ArrowLeft,
   ChevronRight,
+  Info,
 } from "lucide-react";
 import Toast from "../../../components/Toast";
 import { Button } from "../../../components/ui/button";
@@ -34,6 +35,7 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { Textarea } from "../../../components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { getApiErrorMessage } from "../../../lib/api-error";
 import {
   TEHSIL_OPTIONS,
@@ -218,7 +220,7 @@ const WaterSystemForm = () => {
     Array<keyof typeof formData>
   > = {
     1: ["tehsil", "village"],
-    2: ["pump_model", "pump_serial_number", "pump_flow_rate", "start_of_operation"],
+    2: ["pump_model", "pump_flow_rate", "start_of_operation"],
     3: ["bulk_meter_installed"],
   };
 
@@ -231,7 +233,7 @@ const WaterSystemForm = () => {
     pump_model: "Pump Model",
     pump_serial_number: "Pump Serial Number",
     start_of_operation: "Operation Start",
-    depth_of_water_intake: "Intake Depth",
+    depth_of_water_intake: "Column Height",
     height_to_ohr: "Height to OHR",
     pump_flow_rate: "Flow Rate",
     bulk_meter_installed: "Bulk meter installed",
@@ -538,7 +540,9 @@ const WaterSystemForm = () => {
                 <div className="space-y-2">
                   <Label>
                     Pump serial number
-                    <RequiredMark />
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      (Optional)
+                    </span>
                   </Label>
                   <Input
                     name="pump_serial_number"
@@ -550,7 +554,25 @@ const WaterSystemForm = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Intake Depth (m)</Label>
+                  <div className="flex items-center gap-2">
+                    <Label className="leading-none">Column Height (m)</Label>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <button
+                            type="button"
+                            className="inline-flex items-center text-muted-foreground hover:text-foreground"
+                            aria-label="What is Column Height?"
+                          >
+                            <Info className="size-4" />
+                          </button>
+                        }
+                      />
+                      <TooltipContent>
+                        Vertical distance/height of the water column (formerly “Intake depth”).
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                   <Input
                     type="number"
                     name="depth_of_water_intake"

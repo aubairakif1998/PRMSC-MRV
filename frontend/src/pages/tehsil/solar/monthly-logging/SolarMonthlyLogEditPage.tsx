@@ -106,8 +106,12 @@ export default function SolarMonthlyLogEditPage() {
     null,
   );
 
-  const [energyConsumed, setEnergyConsumed] = useState("");
-  const [energyExported, setEnergyExported] = useState("");
+  const [exportOffPeak, setExportOffPeak] = useState("");
+  const [exportPeak, setExportPeak] = useState("");
+  const [importOffPeak, setImportOffPeak] = useState("");
+  const [importPeak, setImportPeak] = useState("");
+  const [netOffPeak, setNetOffPeak] = useState("");
+  const [netPeak, setNetPeak] = useState("");
   const [remarks, setRemarks] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
@@ -162,16 +166,34 @@ export default function SolarMonthlyLogEditPage() {
         }
 
         setRecord(rec);
-        setEnergyConsumed(
-          rec.energy_consumed_from_grid != null &&
-            String(rec.energy_consumed_from_grid) !== ""
-            ? String(rec.energy_consumed_from_grid)
+        setExportOffPeak(
+          rec.export_off_peak != null && String(rec.export_off_peak) !== ""
+            ? String(rec.export_off_peak)
             : "",
         );
-        setEnergyExported(
-          rec.energy_exported_to_grid != null &&
-            String(rec.energy_exported_to_grid) !== ""
-            ? String(rec.energy_exported_to_grid)
+        setExportPeak(
+          rec.export_peak != null && String(rec.export_peak) !== ""
+            ? String(rec.export_peak)
+            : "",
+        );
+        setImportOffPeak(
+          rec.import_off_peak != null && String(rec.import_off_peak) !== ""
+            ? String(rec.import_off_peak)
+            : "",
+        );
+        setImportPeak(
+          rec.import_peak != null && String(rec.import_peak) !== ""
+            ? String(rec.import_peak)
+            : "",
+        );
+        setNetOffPeak(
+          rec.net_off_peak != null && String(rec.net_off_peak) !== ""
+            ? String(rec.net_off_peak)
+            : "",
+        );
+        setNetPeak(
+          rec.net_peak != null && String(rec.net_peak) !== ""
+            ? String(rec.net_peak)
             : "",
         );
         setRemarks(rec.remarks?.trim() ? String(rec.remarks) : "");
@@ -200,16 +222,18 @@ export default function SolarMonthlyLogEditPage() {
 
   const save = async () => {
     if (!recordId || !record) return;
-    const imp = parseFloat(energyConsumed);
-    const exp = parseFloat(energyExported);
-    if (
-      energyConsumed.trim() === "" ||
-      energyExported.trim() === "" ||
-      Number.isNaN(imp) ||
-      Number.isNaN(exp)
-    ) {
+    const values = [
+      exportOffPeak,
+      exportPeak,
+      importOffPeak,
+      importPeak,
+      netOffPeak,
+      netPeak,
+    ];
+    const nums = values.map((v) => parseFloat(v));
+    if (values.some((v) => v.trim() === "") || nums.some((n) => Number.isNaN(n))) {
       toast.error(
-        "Enter import and export values in kWh (numbers; 0 is allowed).",
+        "Enter Import/Export/Net values (Peak & Off-Peak) in kWh (numbers; 0 is allowed).",
       );
       return;
     }
@@ -224,8 +248,12 @@ export default function SolarMonthlyLogEditPage() {
       }
 
       const payload: Record<string, unknown> = {
-        energy_consumed_from_grid: energyConsumed,
-        energy_exported_to_grid: energyExported,
+        export_off_peak: exportOffPeak,
+        export_peak: exportPeak,
+        import_off_peak: importOffPeak,
+        import_peak: importPeak,
+        net_off_peak: netOffPeak,
+        net_peak: netPeak,
         remarks: remarks.trim() || null,
       };
       if (imagePath) {
@@ -241,8 +269,12 @@ export default function SolarMonthlyLogEditPage() {
         if (!prev) return prev;
         const next: SolarMonthlySupplyRecordDetail = {
           ...prev,
-          energy_consumed_from_grid: imp,
-          energy_exported_to_grid: exp,
+          export_off_peak: nums[0]!,
+          export_peak: nums[1]!,
+          import_off_peak: nums[2]!,
+          import_peak: nums[3]!,
+          net_off_peak: nums[4]!,
+          net_peak: nums[5]!,
           remarks: remarks.trim() ? remarks.trim() : null,
           electricity_bill_image_url: imagePath
             ? imagePath
@@ -356,30 +388,86 @@ export default function SolarMonthlyLogEditPage() {
           <CardHeader className="border-b border-border/60 bg-card">
             <CardTitle>Energy & evidence</CardTitle>
             <CardDescription>
-              Update grid import/export (kWh) and optional bill image for this
-              month.
+              Update peak/off-peak import/export/net (kWh) and optional bill image
+              for this month.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 pt-6">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="imp">Energy consumed from grid (kWh)</Label>
+                <Label htmlFor="export-off-peak">Export off-peak (kWh)</Label>
                 <Input
-                  id="imp"
+                  id="export-off-peak"
+                  type="number"
+                  step="0.01"
                   inputMode="decimal"
-                  value={energyConsumed}
-                  onChange={(e) => setEnergyConsumed(e.target.value)}
+                  value={exportOffPeak}
+                  onChange={(e) => setExportOffPeak(e.target.value)}
                   placeholder="0"
                   disabled={saving}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="exp">Energy exported to grid (kWh)</Label>
+                <Label htmlFor="export-peak">Export peak (kWh)</Label>
                 <Input
-                  id="exp"
+                  id="export-peak"
+                  type="number"
+                  step="0.01"
                   inputMode="decimal"
-                  value={energyExported}
-                  onChange={(e) => setEnergyExported(e.target.value)}
+                  value={exportPeak}
+                  onChange={(e) => setExportPeak(e.target.value)}
+                  placeholder="0"
+                  disabled={saving}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="import-off-peak">Import off-peak (kWh)</Label>
+                <Input
+                  id="import-off-peak"
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={importOffPeak}
+                  onChange={(e) => setImportOffPeak(e.target.value)}
+                  placeholder="0"
+                  disabled={saving}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="import-peak">Import peak (kWh)</Label>
+                <Input
+                  id="import-peak"
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={importPeak}
+                  onChange={(e) => setImportPeak(e.target.value)}
+                  placeholder="0"
+                  disabled={saving}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="net-off-peak">Net off-peak (kWh)</Label>
+                <Input
+                  id="net-off-peak"
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={netOffPeak}
+                  onChange={(e) => setNetOffPeak(e.target.value)}
+                  placeholder="0"
+                  disabled={saving}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="net-peak">Net peak (kWh)</Label>
+                <Input
+                  id="net-peak"
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={netPeak}
+                  onChange={(e) => setNetPeak(e.target.value)}
                   placeholder="0"
                   disabled={saving}
                 />

@@ -1,10 +1,4 @@
-import {
-  useState,
-  useEffect,
-  useMemo,
-  useRef,
-  useCallback,
-} from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   useNavigate,
   useSearchParams,
@@ -77,7 +71,8 @@ function formatSiteLabel(s: RegisteredSolarSystem): string {
   if (s.settlement?.trim()) parts.push(s.settlement.trim());
   const loc = parts.join(" · ");
   const cap =
-    s.solar_panel_capacity != null && !Number.isNaN(Number(s.solar_panel_capacity))
+    s.solar_panel_capacity != null &&
+    !Number.isNaN(Number(s.solar_panel_capacity))
       ? ` · ${s.solar_panel_capacity} kWp`
       : "";
   return `${loc}${cap}`;
@@ -88,8 +83,12 @@ type ToastType = "success" | "error";
 type SolarSupplyRow = {
   id?: string;
   month: number;
-  energy_consumed_from_grid?: string | number | null;
-  energy_exported_to_grid?: string | number | null;
+  export_off_peak?: string | number | null;
+  export_peak?: string | number | null;
+  import_off_peak?: string | number | null;
+  import_peak?: string | number | null;
+  net_off_peak?: string | number | null;
+  net_peak?: string | number | null;
   remarks?: string | null;
   electricity_bill_image_url?: string | null;
   updated_at?: string | null;
@@ -158,8 +157,7 @@ const SolarSupplyDataForm = () => {
   }, [location.state, navigate]);
   const systemIdParam = searchParams.get("system");
   /** Path `/tehsil/solar-energy-data/:recordId` or legacy `?record=` */
-  const recordIdParam =
-    recordIdFromPath ?? searchParams.get("record");
+  const recordIdParam = recordIdFromPath ?? searchParams.get("record");
   const isDedicatedRecordEdit = Boolean(recordIdFromPath);
 
   const [registeredSystems, setRegisteredSystems] = useState<
@@ -168,8 +166,12 @@ const SolarSupplyDataForm = () => {
   const [selectedSystemId, setSelectedSystemId] = useState<string>("");
   const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(currentMonth);
-  const [energyConsumed, setEnergyConsumed] = useState("");
-  const [energyExported, setEnergyExported] = useState("");
+  const [exportOffPeak, setExportOffPeak] = useState("");
+  const [exportPeak, setExportPeak] = useState("");
+  const [importOffPeak, setImportOffPeak] = useState("");
+  const [importPeak, setImportPeak] = useState("");
+  const [netOffPeak, setNetOffPeak] = useState("");
+  const [netPeak, setNetPeak] = useState("");
   const [remarks, setRemarks] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
@@ -283,7 +285,7 @@ const SolarSupplyDataForm = () => {
   }, [isAddOnlyRoute, selectedSystem, year, getSolarSupplyData]);
 
   const existingRecordIdForMonth = isAddOnlyRoute
-    ? existingMonthlyByMonth[month] ?? null
+    ? (existingMonthlyByMonth[month] ?? null)
     : null;
 
   useEffect(() => {
@@ -291,7 +293,7 @@ const SolarSupplyDataForm = () => {
     (async () => {
       try {
         setLoadingSystems(true);
-        const systems = await getSolarSystems();
+        const systems = await getSolarSystems({});
         if (!cancelled)
           setRegisteredSystems(systems as RegisteredSolarSystem[]);
       } catch (err: unknown) {
@@ -332,8 +334,12 @@ const SolarSupplyDataForm = () => {
         solar_system_id?: string;
         year?: number;
         month?: number;
-        energy_consumed_from_grid?: number | string | null;
-        energy_exported_to_grid?: number | string | null;
+        export_off_peak?: number | string | null;
+        export_peak?: number | string | null;
+        import_off_peak?: number | string | null;
+        import_peak?: number | string | null;
+        net_off_peak?: number | string | null;
+        net_peak?: number | string | null;
         remarks?: string | null;
         electricity_bill_image_url?: string | null;
         updated_at?: string | null;
@@ -352,16 +358,34 @@ const SolarSupplyDataForm = () => {
           : null,
       );
       setRecordUpdatedAt(rec.updated_at ?? null);
-      setEnergyConsumed(
-        rec.energy_consumed_from_grid != null &&
-          String(rec.energy_consumed_from_grid) !== ""
-          ? String(rec.energy_consumed_from_grid)
+      setExportOffPeak(
+        rec.export_off_peak != null && String(rec.export_off_peak) !== ""
+          ? String(rec.export_off_peak)
           : "",
       );
-      setEnergyExported(
-        rec.energy_exported_to_grid != null &&
-          String(rec.energy_exported_to_grid) !== ""
-          ? String(rec.energy_exported_to_grid)
+      setExportPeak(
+        rec.export_peak != null && String(rec.export_peak) !== ""
+          ? String(rec.export_peak)
+          : "",
+      );
+      setImportOffPeak(
+        rec.import_off_peak != null && String(rec.import_off_peak) !== ""
+          ? String(rec.import_off_peak)
+          : "",
+      );
+      setImportPeak(
+        rec.import_peak != null && String(rec.import_peak) !== ""
+          ? String(rec.import_peak)
+          : "",
+      );
+      setNetOffPeak(
+        rec.net_off_peak != null && String(rec.net_off_peak) !== ""
+          ? String(rec.net_off_peak)
+          : "",
+      );
+      setNetPeak(
+        rec.net_peak != null && String(rec.net_peak) !== ""
+          ? String(rec.net_peak)
           : "",
       );
       setRemarks(rec.remarks?.trim() ? String(rec.remarks) : "");
@@ -387,8 +411,12 @@ const SolarSupplyDataForm = () => {
           settlement?: string;
           year?: number;
           month?: number;
-          energy_consumed_from_grid?: number | string | null;
-          energy_exported_to_grid?: number | string | null;
+          export_off_peak?: number | string | null;
+          export_peak?: number | string | null;
+          import_off_peak?: number | string | null;
+          import_peak?: number | string | null;
+          net_off_peak?: number | string | null;
+          net_peak?: number | string | null;
           remarks?: string | null;
           electricity_bill_image_url?: string | null;
           updated_at?: string | null;
@@ -447,8 +475,12 @@ const SolarSupplyDataForm = () => {
           solar_system_id?: string;
           year?: number;
           month?: number;
-          energy_consumed_from_grid?: number | string | null;
-          energy_exported_to_grid?: number | string | null;
+          export_off_peak?: number | string | null;
+          export_peak?: number | string | null;
+          import_off_peak?: number | string | null;
+          import_peak?: number | string | null;
+          net_off_peak?: number | string | null;
+          net_peak?: number | string | null;
           remarks?: string | null;
           electricity_bill_image_url?: string | null;
           updated_at?: string | null;
@@ -529,16 +561,34 @@ const SolarSupplyDataForm = () => {
               : null,
           );
           setRecordUpdatedAt(row.updated_at ?? null);
-          setEnergyConsumed(
-            row.energy_consumed_from_grid != null &&
-              String(row.energy_consumed_from_grid) !== ""
-              ? String(row.energy_consumed_from_grid)
+          setExportOffPeak(
+            row.export_off_peak != null && String(row.export_off_peak) !== ""
+              ? String(row.export_off_peak)
               : "",
           );
-          setEnergyExported(
-            row.energy_exported_to_grid != null &&
-              String(row.energy_exported_to_grid) !== ""
-              ? String(row.energy_exported_to_grid)
+          setExportPeak(
+            row.export_peak != null && String(row.export_peak) !== ""
+              ? String(row.export_peak)
+              : "",
+          );
+          setImportOffPeak(
+            row.import_off_peak != null && String(row.import_off_peak) !== ""
+              ? String(row.import_off_peak)
+              : "",
+          );
+          setImportPeak(
+            row.import_peak != null && String(row.import_peak) !== ""
+              ? String(row.import_peak)
+              : "",
+          );
+          setNetOffPeak(
+            row.net_off_peak != null && String(row.net_off_peak) !== ""
+              ? String(row.net_off_peak)
+              : "",
+          );
+          setNetPeak(
+            row.net_peak != null && String(row.net_peak) !== ""
+              ? String(row.net_peak)
               : "",
           );
           setRemarks(row.remarks?.trim() ? String(row.remarks) : "");
@@ -546,8 +596,12 @@ const SolarSupplyDataForm = () => {
           setEditingRecordId(null);
           setExistingEvidenceUrl(null);
           setRecordUpdatedAt(null);
-          setEnergyConsumed("");
-          setEnergyExported("");
+          setExportOffPeak("");
+          setExportPeak("");
+          setImportOffPeak("");
+          setImportPeak("");
+          setNetOffPeak("");
+          setNetPeak("");
           setRemarks("");
         }
         setAttachment(null);
@@ -606,16 +660,22 @@ const SolarSupplyDataForm = () => {
       });
       return;
     }
-    const imp = parseFloat(energyConsumed);
-    const exp = parseFloat(energyExported);
+    const values = [
+      exportOffPeak,
+      exportPeak,
+      importOffPeak,
+      importPeak,
+      netOffPeak,
+      netPeak,
+    ];
+    const nums = values.map((v) => parseFloat(v));
     if (
-      energyConsumed.trim() === "" ||
-      energyExported.trim() === "" ||
-      Number.isNaN(imp) ||
-      Number.isNaN(exp)
+      values.some((v) => v.trim() === "") ||
+      nums.some((n) => Number.isNaN(n))
     ) {
       setToast({
-        message: "Enter import and export values in kWh (numbers; 0 is allowed).",
+        message:
+          "Enter Import/Export/Net values (Peak & Off-Peak) in kWh (numbers; 0 is allowed).",
         type: "error",
       });
       return;
@@ -628,7 +688,7 @@ const SolarSupplyDataForm = () => {
         const uploadRes = await uploadImage(
           attachment,
           "solar",
-          isAddOnlyRoute ? undefined : editingRecordId ?? undefined,
+          isAddOnlyRoute ? undefined : (editingRecordId ?? undefined),
         );
         const raw = uploadRes.image_url ?? uploadRes.path;
         imagePath = typeof raw === "string" ? raw : null;
@@ -644,8 +704,12 @@ const SolarSupplyDataForm = () => {
               monthlyData: [
                 {
                   month,
-                  energy_consumed_from_grid: energyConsumed,
-                  energy_exported_to_grid: energyExported,
+                  export_off_peak: exportOffPeak,
+                  export_peak: exportPeak,
+                  import_off_peak: importOffPeak,
+                  import_peak: importPeak,
+                  net_off_peak: netOffPeak,
+                  net_peak: netPeak,
                   remarks: remarks.trim() || null,
                 },
               ],
@@ -660,8 +724,12 @@ const SolarSupplyDataForm = () => {
         setEditingRecordId(null);
         setExistingEvidenceUrl(null);
         setRecordUpdatedAt(null);
-        setEnergyConsumed("");
-        setEnergyExported("");
+        setExportOffPeak("");
+        setExportPeak("");
+        setImportOffPeak("");
+        setImportPeak("");
+        setNetOffPeak("");
+        setNetPeak("");
         setRemarks("");
         navigateBack();
         return;
@@ -669,15 +737,22 @@ const SolarSupplyDataForm = () => {
 
       if (editingRecordId) {
         const payload: Record<string, unknown> = {
-          energy_consumed_from_grid: energyConsumed,
-          energy_exported_to_grid: energyExported,
+          export_off_peak: exportOffPeak,
+          export_peak: exportPeak,
+          import_off_peak: importOffPeak,
+          import_peak: importPeak,
+          net_off_peak: netOffPeak,
+          net_peak: netPeak,
           remarks: remarks.trim() || null,
         };
         if (imagePath) {
           payload.image_url = imagePath;
           payload.image_path = imagePath;
         }
-        const res = (await updateSolarSupplyRecord(editingRecordId, payload)) as {
+        const res = (await updateSolarSupplyRecord(
+          editingRecordId,
+          payload,
+        )) as {
           updated_at?: string;
         };
         if (res?.updated_at) setRecordUpdatedAt(res.updated_at);
@@ -698,8 +773,12 @@ const SolarSupplyDataForm = () => {
               monthlyData: [
                 {
                   month,
-                  energy_consumed_from_grid: energyConsumed,
-                  energy_exported_to_grid: energyExported,
+                  export_off_peak: exportOffPeak,
+                  export_peak: exportPeak,
+                  import_off_peak: importOffPeak,
+                  import_peak: importPeak,
+                  net_off_peak: netOffPeak,
+                  net_peak: netPeak,
                   remarks: remarks.trim() || null,
                 },
               ],
@@ -742,8 +821,12 @@ const SolarSupplyDataForm = () => {
       setEditingRecordId(null);
       setExistingEvidenceUrl(null);
       setRecordUpdatedAt(null);
-      setEnergyConsumed("");
-      setEnergyExported("");
+      setExportOffPeak("");
+      setExportPeak("");
+      setImportOffPeak("");
+      setImportPeak("");
+      setNetOffPeak("");
+      setNetPeak("");
       setRemarks("");
       setAttachment(null);
     } catch (err: unknown) {
@@ -806,346 +889,392 @@ const SolarSupplyDataForm = () => {
           </div>
         </div>
 
-      {isDedicatedRecordEdit && loadingDedicatedRecord ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="size-10 animate-spin text-amber-500" />
-        </div>
-      ) : isDedicatedRecordEdit && recordLoadError ? (
-        <Card className="rounded-2xl border-rose-200 bg-rose-50/50">
-          <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
-            <AlertCircle className="size-12 text-rose-600" />
-            <p className="text-base font-semibold text-slate-900">
-              Could not load this log
-            </p>
-            <p className="max-w-md text-sm text-slate-600">{recordLoadError}</p>
-            <Button
-              variant="outline"
-              onClick={() => navigate(tehsilRoutes.solarMonthlyLogging)}
-            >
-              Back to Solar Monthly Logging
-            </Button>
-          </CardContent>
-        </Card>
-      ) : showSystemsSpinner ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="size-10 animate-spin text-amber-500" />
-        </div>
-      ) : noSitesInScope ? (
-        <Card className="border-dashed border-slate-300">
-          <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
-            <AlertCircle className="size-12 text-amber-500" />
-            <p className="text-base font-semibold text-slate-800">
-              {hasResolvedProfileTehsils
-                ? "No solar sites in your tehsil yet"
-                : "No registered solar sites"}
-            </p>
-            <p className="text-sm text-slate-600">
-              Register a site first, then log grid import and export here.
-            </p>
-            <Button
-              onClick={() => navigate(tehsilRoutes.solarForm)}
-            >
-              Register solar site
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="border-slate-200">
-          <CardHeader>
-            <CardTitle className="text-base">Entry</CardTitle>
-            <CardDescription>
-              Select site and period, then enter energy values and upload evidence.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {isAddOnlyRoute ? (
-              loadingExistingForAdd ? (
-                <Alert>
-                  <Loader2 className="size-4 animate-spin" />
-                  <AlertTitle>Checking existing logs…</AlertTitle>
-                  <AlertDescription>
-                    Validating whether this month already exists for the selected
-                    site and year.
-                  </AlertDescription>
-                </Alert>
-              ) : existingRecordIdForMonth ? (
-                <Alert variant="destructive">
-                  <AlertCircle className="size-4" />
-                  <AlertTitle>Duplicate month blocked</AlertTitle>
-                  <AlertDescription>
-                    A log for <strong>{monthLabel}</strong> <strong>{year}</strong>{" "}
-                    already exists for this site. Editing is only available from{" "}
-                    <strong>Solar Monthly Logging</strong>.
-                    <br />
-                    <button
-                      type="button"
-                      className="mt-2 text-sm font-semibold underline underline-offset-4"
-                      onClick={() =>
-                        navigate(
-                          tehsilRoutes.solarMonthlyLogEdit(existingRecordIdForMonth),
-                        )
-                      }
-                    >
-                      Open existing record
-                    </button>
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <Alert>
-                  <Zap className="size-4" />
-                  <AlertTitle>Add mode</AlertTitle>
-                  <AlertDescription>
-                    This screen will only create a new log. Existing logs can’t be
-                    edited here.
-                  </AlertDescription>
-                </Alert>
-              )
-            ) : null}
+        {isDedicatedRecordEdit && loadingDedicatedRecord ? (
+          <div className="flex justify-center py-16">
+            <Loader2 className="size-10 animate-spin text-amber-500" />
+          </div>
+        ) : isDedicatedRecordEdit && recordLoadError ? (
+          <Card className="rounded-2xl border-rose-200 bg-rose-50/50">
+            <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+              <AlertCircle className="size-12 text-rose-600" />
+              <p className="text-base font-semibold text-slate-900">
+                Could not load this log
+              </p>
+              <p className="max-w-md text-sm text-slate-600">
+                {recordLoadError}
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => navigate(tehsilRoutes.solarMonthlyLogging)}
+              >
+                Back to Solar Monthly Logging
+              </Button>
+            </CardContent>
+          </Card>
+        ) : showSystemsSpinner ? (
+          <div className="flex justify-center py-16">
+            <Loader2 className="size-10 animate-spin text-amber-500" />
+          </div>
+        ) : noSitesInScope ? (
+          <Card className="border-dashed border-slate-300">
+            <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+              <AlertCircle className="size-12 text-amber-500" />
+              <p className="text-base font-semibold text-slate-800">
+                {hasResolvedProfileTehsils
+                  ? "No solar sites in your tehsil yet"
+                  : "No registered solar sites"}
+              </p>
+              <p className="text-sm text-slate-600">
+                Register a site first, then log grid import and export here.
+              </p>
+              <Button onClick={() => navigate(tehsilRoutes.solarForm)}>
+                Register solar site
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle className="text-base">Entry</CardTitle>
+              <CardDescription>
+                Select site and period, then enter energy values and upload
+                evidence.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {isAddOnlyRoute ? (
+                loadingExistingForAdd ? (
+                  <Alert>
+                    <Loader2 className="size-4 animate-spin" />
+                    <AlertTitle>Checking existing logs…</AlertTitle>
+                    <AlertDescription>
+                      Validating whether this month already exists for the
+                      selected site and year.
+                    </AlertDescription>
+                  </Alert>
+                ) : existingRecordIdForMonth ? (
+                  <Alert variant="destructive">
+                    <AlertCircle className="size-4" />
+                    <AlertTitle>Duplicate month blocked</AlertTitle>
+                    <AlertDescription>
+                      A log for <strong>{monthLabel}</strong>{" "}
+                      <strong>{year}</strong> already exists for this site.
+                      Editing is only available from{" "}
+                      <strong>Solar Monthly Logging</strong>.
+                      <br />
+                      <button
+                        type="button"
+                        className="mt-2 text-sm font-semibold underline underline-offset-4"
+                        onClick={() =>
+                          navigate(
+                            tehsilRoutes.solarMonthlyLogEdit(
+                              existingRecordIdForMonth,
+                            ),
+                          )
+                        }
+                      >
+                        Open existing record
+                      </button>
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <Alert>
+                    <Zap className="size-4" />
+                    <AlertTitle>Add mode</AlertTitle>
+                    <AlertDescription>
+                      This screen will only create a new log. Existing logs
+                      can’t be edited here.
+                    </AlertDescription>
+                  </Alert>
+                )
+              ) : null}
 
-            {isDedicatedRecordEdit && selectedSystem ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm">
-                <p className="font-semibold text-slate-900">
-                  {formatSiteLabel(selectedSystem)}
-                </p>
-                <p className="mt-1 flex flex-wrap items-center gap-x-2 text-slate-600">
-                  <span className="inline-flex items-center gap-1">
-                    <Calendar className="size-3.5 text-slate-400" />
-                    {year} · {monthLabel}
-                  </span>
-                  <span className="text-slate-400">·</span>
-                  <span className="text-xs uppercase tracking-wide text-slate-500">
-                    {canonicalTehsil(selectedSystem.tehsil) ?? selectedSystem.tehsil}
-                  </span>
-                </p>
-              </div>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label>Solar site</Label>
-                  <Select
-                    value={selectedSystemId || "__none__"}
-                    onValueChange={(v) => {
-                      if (v == null || v === "__none__") setSelectedSystemId("");
-                      else setSelectedSystemId(v);
-                    }}
-                  >
-                    <SelectTrigger className="h-11 w-full">
-                      <SelectValue placeholder="Choose a site" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Choose a site…</SelectItem>
-                      {scopedRegisteredSystems.map((s) => (
-                        <SelectItem key={String(s.id)} value={String(s.id)}>
-                          {formatSiteLabel(s)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              {isDedicatedRecordEdit && selectedSystem ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm">
+                  <p className="font-semibold text-slate-900">
+                    {formatSiteLabel(selectedSystem)}
+                  </p>
+                  <p className="mt-1 flex flex-wrap items-center gap-x-2 text-slate-600">
+                    <span className="inline-flex items-center gap-1">
+                      <Calendar className="size-3.5 text-slate-400" />
+                      {year} · {monthLabel}
+                    </span>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-xs uppercase tracking-wide text-slate-500">
+                      {canonicalTehsil(selectedSystem.tehsil) ??
+                        selectedSystem.tehsil}
+                    </span>
+                  </p>
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
+              ) : (
+                <>
                   <div className="space-y-2">
-                    <Label className="flex items-center gap-1.5">
-                      <Calendar className="size-3.5 text-slate-400" />
-                      Year
-                    </Label>
+                    <Label>Solar site</Label>
                     <Select
-                      value={String(year)}
-                      onValueChange={(v) => v && setYear(Number(v))}
+                      value={selectedSystemId || "__none__"}
+                      onValueChange={(v) => {
+                        if (v == null || v === "__none__")
+                          setSelectedSystemId("");
+                        else setSelectedSystemId(v);
+                      }}
                     >
                       <SelectTrigger className="h-11 w-full">
-                        <SelectValue />
+                        <SelectValue placeholder="Choose a site" />
                       </SelectTrigger>
                       <SelectContent>
-                        {[currentYear, currentYear - 1, currentYear - 2].map(
-                          (y) => (
-                            <SelectItem key={y} value={String(y)}>
-                              {y}
-                            </SelectItem>
-                          ),
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-1.5">
-                      <Calendar className="size-3.5 text-slate-400" />
-                      Month
-                    </Label>
-                    <Select
-                      value={String(month)}
-                      onValueChange={(v) => v && setMonth(Number(v))}
-                    >
-                      <SelectTrigger className="h-11 w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {MONTHS.map((m) => (
-                          <SelectItem
-                            key={m.num}
-                            value={String(m.num)}
-                            disabled={
-                              year === currentYear && m.num > currentMonth
-                            }
-                          >
-                            {m.name}
+                        <SelectItem value="__none__">Choose a site…</SelectItem>
+                        {scopedRegisteredSystems.map((s) => (
+                          <SelectItem key={String(s.id)} value={String(s.id)}>
+                            {formatSiteLabel(s)}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1.5">
+                        <Calendar className="size-3.5 text-slate-400" />
+                        Year
+                      </Label>
+                      <Select
+                        value={String(year)}
+                        onValueChange={(v) => v && setYear(Number(v))}
+                      >
+                        <SelectTrigger className="h-11 w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[currentYear, currentYear - 1, currentYear - 2].map(
+                            (y) => (
+                              <SelectItem key={y} value={String(y)}>
+                                {y}
+                              </SelectItem>
+                            ),
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1.5">
+                        <Calendar className="size-3.5 text-slate-400" />
+                        Month
+                      </Label>
+                      <Select
+                        value={String(month)}
+                        onValueChange={(v) => v && setMonth(Number(v))}
+                      >
+                        <SelectTrigger className="h-11 w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MONTHS.map((m) => (
+                            <SelectItem
+                              key={m.num}
+                              value={String(m.num)}
+                              disabled={
+                                year === currentYear && m.num > currentMonth
+                              }
+                            >
+                              {m.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {recordUpdatedAt ? (
+                <p className="text-xs text-slate-500">
+                  Last updated:{" "}
+                  <span className="font-medium text-slate-700">
+                    {formatDateTime(recordUpdatedAt)}
+                  </span>
+                </p>
+              ) : null}
+
+              <Separator />
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="export-off-peak">Export off-peak </Label>
+                  <Input
+                    id="export-off-peak"
+                    type="number"
+                    step="0.01"
+                    className="h-11"
+                    value={exportOffPeak}
+                    onChange={(e) => setExportOffPeak(e.target.value)}
+                    placeholder="0"
+                  />
                 </div>
-              </>
-            )}
+                <div className="space-y-2">
+                  <Label htmlFor="export-peak">Export peak </Label>
+                  <Input
+                    id="export-peak"
+                    type="number"
+                    step="0.01"
+                    className="h-11"
+                    value={exportPeak}
+                    onChange={(e) => setExportPeak(e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="import-off-peak">Import off-peak </Label>
+                  <Input
+                    id="import-off-peak"
+                    type="number"
+                    step="0.01"
+                    className="h-11"
+                    value={importOffPeak}
+                    onChange={(e) => setImportOffPeak(e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="import-peak">Import peak </Label>
+                  <Input
+                    id="import-peak"
+                    type="number"
+                    step="0.01"
+                    className="h-11"
+                    value={importPeak}
+                    onChange={(e) => setImportPeak(e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="net-off-peak">Net off-peak </Label>
+                  <Input
+                    id="net-off-peak"
+                    type="number"
+                    step="0.01"
+                    className="h-11"
+                    value={netOffPeak}
+                    onChange={(e) => setNetOffPeak(e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="net-peak">Net peak </Label>
+                  <Input
+                    id="net-peak"
+                    type="number"
+                    step="0.01"
+                    className="h-11"
+                    value={netPeak}
+                    onChange={(e) => setNetPeak(e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="remarks">Remarks</Label>
+                  <Textarea
+                    id="remarks"
+                    className="min-h-20 resize-none"
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    placeholder="Optional notes for this month"
+                  />
+                </div>
+              </div>
 
-            {recordUpdatedAt ? (
-              <p className="text-xs text-slate-500">
-                Last updated:{" "}
-                <span className="font-medium text-slate-700">
-                  {formatDateTime(recordUpdatedAt)}
-                </span>
-              </p>
-            ) : null}
+              <Separator />
 
-            <Separator />
-
-            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="energy-in">Energy consumed (import) kWh</Label>
-                <Input
-                  id="energy-in"
-                  type="number"
-                  step="0.01"
-                  className="h-11"
-                  value={energyConsumed}
-                  onChange={(e) => setEnergyConsumed(e.target.value)}
-                  placeholder="0"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Total grid import for the selected month.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="energy-out">Energy exported kWh</Label>
-                <Input
-                  id="energy-out"
-                  type="number"
-                  step="0.01"
-                  className="h-11"
-                  value={energyExported}
-                  onChange={(e) => setEnergyExported(e.target.value)}
-                  placeholder="0"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Total export to grid for the selected month.
-                </p>
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="remarks">Remarks</Label>
-                <Textarea
-                  id="remarks"
-                  className="min-h-20 resize-none"
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="Optional notes for this month"
-                />
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Camera className="size-4 text-amber-600" />
-                Net metering evidence
-              </Label>
-              {existingEvidenceUrl && !attachment ? (
-                <a
-                  href={existingEvidenceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-amber-700 underline-offset-4 hover:underline"
-                >
-                  <ExternalLink className="size-3.5" />
-                  View current file
-                </a>
-              ) : null}
-              <button
-                type="button"
-                className="w-full rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center transition-colors hover:border-amber-300 hover:bg-amber-50/30"
-                onClick={() =>
-                  document.getElementById("solar-evidence-input")?.click()
-                }
-              >
-                <input
-                  id="solar-evidence-input"
-                  type="file"
-                  hidden
-                  accept="image/*"
-                  onChange={(e) =>
-                    setAttachment(e.target.files?.[0] ?? null)
-                  }
-                />
-                {!attachment ? (
-                  <>
-                    <Zap className="mx-auto mb-2 size-10 text-slate-300" />
-                    <p className="text-sm font-medium text-slate-600">
-                      Tap to upload or replace bill photo
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      PNG or JPG — replaces stored file when you save
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="mx-auto mb-2 size-10 text-amber-500" />
-                    <p className="text-sm font-semibold text-slate-800">
-                      {attachment.name}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Tap to choose a different file
-                    </p>
-                  </>
-                )}
-              </button>
-            </div>
-
-            <Separator />
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Button
-                className="h-12 flex-1 gap-2"
-                disabled={
-                  loading ||
-                  !selectedSystemId ||
-                  (isAddOnlyRoute && loadingExistingForAdd) ||
-                  (isAddOnlyRoute && Boolean(existingRecordIdForMonth))
-                }
-                onClick={() => void save()}
-              >
-                {loading ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Send className="size-4" />
-                )}
-                {isEditingExisting ? "Save changes" : "Save monthly log"}
-              </Button>
-              {isEditingExisting ? (
-                <Button
+                <Label className="flex items-center gap-2">
+                  <Camera className="size-4 text-amber-600" />
+                  Metering evidence
+                </Label>
+                {existingEvidenceUrl && !attachment ? (
+                  <a
+                    href={existingEvidenceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-amber-700 underline-offset-4 hover:underline"
+                  >
+                    <ExternalLink className="size-3.5" />
+                    View current file
+                  </a>
+                ) : null}
+                <button
                   type="button"
-                  variant="outline"
-                  className="h-12 gap-2 border-rose-200 text-rose-700 hover:bg-rose-50"
-                  disabled={loading}
-                  onClick={() => void removeMonthlyRecord()}
+                  className="w-full rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center transition-colors hover:border-amber-300 hover:bg-amber-50/30"
+                  onClick={() =>
+                    document.getElementById("solar-evidence-input")?.click()
+                  }
                 >
-                  <Trash2 className="size-4" />
-                  Delete
+                  <input
+                    id="solar-evidence-input"
+                    type="file"
+                    hidden
+                    accept="image/*"
+                    onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}
+                  />
+                  {!attachment ? (
+                    <>
+                      <Zap className="mx-auto mb-2 size-10 text-slate-300" />
+                      <p className="text-sm font-medium text-slate-600">
+                        Tap to upload or replace bill photo
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        PNG or JPG — replaces stored file when you save
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="mx-auto mb-2 size-10 text-amber-500" />
+                      <p className="text-sm font-semibold text-slate-800">
+                        {attachment.name}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Tap to choose a different file
+                      </p>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <Separator />
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Button
+                  className="h-12 flex-1 gap-2"
+                  disabled={
+                    loading ||
+                    !selectedSystemId ||
+                    (isAddOnlyRoute && loadingExistingForAdd) ||
+                    (isAddOnlyRoute && Boolean(existingRecordIdForMonth))
+                  }
+                  onClick={() => void save()}
+                >
+                  {loading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Send className="size-4" />
+                  )}
+                  {isEditingExisting ? "Save changes" : "Save monthly log"}
                 </Button>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                {isEditingExisting ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-12 gap-2 border-rose-200 text-rose-700 hover:bg-rose-50"
+                    disabled={loading}
+                    onClick={() => void removeMonthlyRecord()}
+                  >
+                    <Trash2 className="size-4" />
+                    Delete
+                  </Button>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </motion.div>
   );

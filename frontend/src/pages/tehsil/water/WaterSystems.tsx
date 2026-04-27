@@ -328,7 +328,7 @@ export default function WaterSystems() {
                       </div>
                       <div className="flex justify-between gap-3">
                         <span className="text-muted-foreground">
-                          Pump serial
+                          Pump serial (Optional)
                         </span>
                         <span>{kv(detailSystem.pump_serial_number)}</span>
                       </div>

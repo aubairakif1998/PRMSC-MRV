@@ -119,8 +119,12 @@ type SubmissionRecordData = {
   pump_end_time?: string | null;
   pump_operating_hours?: number | string;
   total_water_pumped?: number | string;
-  energy_consumed_from_grid?: number | string;
-  energy_exported_to_grid?: number | string;
+  export_off_peak?: number | string;
+  export_peak?: number | string;
+  import_off_peak?: number | string;
+  import_peak?: number | string;
+  net_off_peak?: number | string;
+  net_peak?: number | string;
   bulk_meter_image_url?: string;
   bulk_meter_image_path?: string; // backward compatibility
   electricity_bill_url?: string;
@@ -525,18 +529,28 @@ const SubmissionReview = () => {
                 ) : (
                   <>
                     <MetaItem
-                      label="Grid Consumption"
-                      value={infoValue(
-                        recordData?.energy_consumed_from_grid,
-                        " kWh",
-                      )}
+                      label="Import off-peak"
+                      value={infoValue(recordData?.import_off_peak, " kWh")}
                     />
                     <MetaItem
-                      label="Energy Exported"
-                      value={infoValue(
-                        recordData?.energy_exported_to_grid,
-                        " kWh",
-                      )}
+                      label="Import peak"
+                      value={infoValue(recordData?.import_peak, " kWh")}
+                    />
+                    <MetaItem
+                      label="Export off-peak"
+                      value={infoValue(recordData?.export_off_peak, " kWh")}
+                    />
+                    <MetaItem
+                      label="Export peak"
+                      value={infoValue(recordData?.export_peak, " kWh")}
+                    />
+                    <MetaItem
+                      label="Net off-peak"
+                      value={infoValue(recordData?.net_off_peak, " kWh")}
+                    />
+                    <MetaItem
+                      label="Net peak"
+                      value={infoValue(recordData?.net_peak, " kWh")}
                     />
                     <MetaItem
                       label="Inverter Capacity"
