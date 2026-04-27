@@ -46,6 +46,9 @@ export type SolarSystemRow = {
   solar_panel_capacity?: number | null;
   inverter_capacity?: number | null;
   inverter_serial_number?: string | null;
+  solar_connection_date?: string | null;
+  electricity_connection_date?: string | null;
+  green_connection_date?: string | null;
   installation_date?: string | null;
   meter_model?: string | null;
   meter_serial_number?: string | null;

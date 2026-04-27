@@ -19,6 +19,13 @@ import { Textarea } from "../../../../components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
 import { Badge } from "../../../../components/ui/badge";
 import { Skeleton } from "../../../../components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../../components/ui/select";
 import { tehsilRoutes } from "../../../../constants/routes";
 import { getApiErrorMessage } from "../../../../lib/api-error";
 import {
@@ -29,6 +36,12 @@ import {
 import type { SolarSystemRow } from "../../../../types/api";
 
 type ToastType = "success" | "error";
+
+const INSTALLATION_TYPE_OPTIONS = [
+  "Ground mounted",
+  "Rooftop",
+  "Other",
+] as const;
 
 export default function SolarSiteEditPage() {
   const navigate = useNavigate();
@@ -50,13 +63,15 @@ export default function SolarSiteEditPage() {
     latitude: "",
     longitude: "",
     installation_location: "",
+    installation_location_other: "",
     solar_panel_capacity: "",
     inverter_capacity: "",
     inverter_serial_number: "",
-    installation_date: "",
+    solar_connection_date: "",
+    electricity_connection_date: "",
+    green_connection_date: "",
     meter_model: "",
     meter_serial_number: "",
-    green_meter_connection_date: "",
     remarks: "",
   });
 
@@ -78,16 +93,38 @@ export default function SolarSiteEditPage() {
       setFormData({
         latitude: s.latitude != null ? String(s.latitude) : "",
         longitude: s.longitude != null ? String(s.longitude) : "",
-        installation_location: String(s.installation_location ?? ""),
+        installation_location:
+          (INSTALLATION_TYPE_OPTIONS as readonly string[]).includes(
+            String(s.installation_location ?? ""),
+          )
+            ? String(s.installation_location ?? "")
+            : String(s.installation_location ?? "")
+              ? "Other"
+              : "",
+        installation_location_other:
+          (INSTALLATION_TYPE_OPTIONS as readonly string[]).includes(
+            String(s.installation_location ?? ""),
+          )
+            ? ""
+            : String(s.installation_location ?? ""),
         solar_panel_capacity: s.solar_panel_capacity != null ? String(s.solar_panel_capacity) : "",
         inverter_capacity: s.inverter_capacity != null ? String(s.inverter_capacity) : "",
         inverter_serial_number: String(s.inverter_serial_number ?? ""),
-        installation_date: s.installation_date ? String(s.installation_date).slice(0, 10) : "",
+        solar_connection_date: s.solar_connection_date
+          ? String(s.solar_connection_date).slice(0, 10)
+          : s.installation_date
+            ? String(s.installation_date).slice(0, 10)
+            : "",
+        electricity_connection_date: s.electricity_connection_date
+          ? String(s.electricity_connection_date).slice(0, 10)
+          : "",
         meter_model: String(s.meter_model ?? ""),
         meter_serial_number: String(s.meter_serial_number ?? ""),
-        green_meter_connection_date: s.green_meter_connection_date
-          ? String(s.green_meter_connection_date).slice(0, 10)
-          : "",
+        green_connection_date: s.green_connection_date
+          ? String(s.green_connection_date).slice(0, 10)
+          : s.green_meter_connection_date
+            ? String(s.green_meter_connection_date).slice(0, 10)
+            : "",
         remarks: String(s.remarks ?? ""),
       });
     } catch (e: unknown) {
@@ -109,10 +146,11 @@ export default function SolarSiteEditPage() {
       formData.solar_panel_capacity.trim() &&
       formData.inverter_capacity.trim() &&
       formData.inverter_serial_number.trim() &&
-      formData.installation_date.trim() &&
       formData.meter_model.trim() &&
       formData.meter_serial_number.trim() &&
-      formData.green_meter_connection_date.trim()
+      formData.solar_connection_date.trim() &&
+      formData.electricity_connection_date.trim() &&
+      formData.green_connection_date.trim()
     );
   }, [formData, isResolved]);
 
@@ -126,11 +164,24 @@ export default function SolarSiteEditPage() {
     if (!isResolved) return;
     setSaving(true);
     try {
+      const installation_location =
+        formData.installation_location === "Other"
+          ? formData.installation_location_other.trim()
+          : formData.installation_location.trim();
+      if (!installation_location) {
+        setToast({
+          message: "Installation type is required.",
+          type: "error",
+        });
+        return;
+      }
       await updateSolarSystem(site!.id, {
         tehsil: site?.tehsil,
         village: site?.village,
         settlement: site?.settlement ?? "",
         ...formData,
+        installation_location,
+        installation_location_other: undefined,
       });
       setToast({ message: "✅ Solar site updated!", type: "success" });
       setTimeout(() => navigate(tehsilRoutes.solarSites), 900);
@@ -280,11 +331,49 @@ export default function SolarSiteEditPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Installation type</Label>
-                  <Input
-                    value={formData.installation_location}
-                    onChange={onChange("installation_location")}
+                  <Select
+                    value={
+                      (INSTALLATION_TYPE_OPTIONS as readonly string[]).includes(
+                        formData.installation_location,
+                      )
+                        ? formData.installation_location
+                        : formData.installation_location
+                          ? "Other"
+                          : "__empty__"
+                    }
+                    onValueChange={(v) => {
+                      if (v == null) return;
+                      const next = v === "__empty__" ? "" : v;
+                      setFormData((prev) => ({
+                        ...prev,
+                        installation_location: next,
+                        installation_location_other:
+                          next === "Other" ? prev.installation_location_other : "",
+                      }));
+                    }}
                     disabled={saving || deleting || !isResolved}
-                  />
+                  >
+                    <SelectTrigger className="h-11 w-full">
+                      <SelectValue placeholder="Select installation type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__empty__">Select installation type</SelectItem>
+                      {INSTALLATION_TYPE_OPTIONS.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {formData.installation_location === "Other" ? (
+                    <Input
+                      value={formData.installation_location_other}
+                      onChange={onChange("installation_location_other")}
+                      disabled={saving || deleting || !isResolved}
+                      placeholder="Type installation type"
+                      className="h-11"
+                    />
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label>PV capacity (kWp)</Label>
@@ -313,11 +402,20 @@ export default function SolarSiteEditPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Commissioning date</Label>
+                  <Label>Solar connection date</Label>
                   <Input
                     type="date"
-                    value={formData.installation_date}
-                    onChange={onChange("installation_date")}
+                    value={formData.solar_connection_date}
+                    onChange={onChange("solar_connection_date")}
+                    disabled={saving || deleting || !isResolved}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Electricity connection date</Label>
+                  <Input
+                    type="date"
+                    value={formData.electricity_connection_date}
+                    onChange={onChange("electricity_connection_date")}
                     disabled={saving || deleting || !isResolved}
                   />
                 </div>
@@ -343,11 +441,11 @@ export default function SolarSiteEditPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Green meter connection date</Label>
+                  <Label>Green connection date</Label>
                   <Input
                     type="date"
-                    value={formData.green_meter_connection_date}
-                    onChange={onChange("green_meter_connection_date")}
+                    value={formData.green_connection_date}
+                    onChange={onChange("green_connection_date")}
                     disabled={saving || deleting || !isResolved}
                   />
                 </div>

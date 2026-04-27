@@ -42,6 +42,12 @@ function canonicalTehsil(raw: string): string | null {
 
 type ToastType = "success" | "error";
 
+const INSTALLATION_TYPE_OPTIONS = [
+  "Ground mounted",
+  "Rooftop",
+  "Other",
+] as const;
+
 const SolarSystemForm = () => {
   const { user } = useAuth();
   const { createSolarSystem, getSolarSystemConfig } =
@@ -80,13 +86,15 @@ const SolarSystemForm = () => {
     latitude: "",
     longitude: "",
     installation_location: "",
+    installation_location_other: "",
     solar_panel_capacity: "",
     inverter_capacity: "",
     inverter_serial_number: "",
-    installation_date: "",
+    solar_connection_date: "",
+    electricity_connection_date: "",
+    green_connection_date: "",
     meter_model: "",
     meter_serial_number: "",
-    green_meter_connection_date: "",
     remarks: "",
   });
 
@@ -171,7 +179,16 @@ const SolarSystemForm = () => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      await createSolarSystem({ ...formData });
+      const installation_location =
+        formData.installation_location === "Other"
+          ? formData.installation_location_other.trim()
+          : formData.installation_location.trim();
+      await createSolarSystem({
+        ...formData,
+        installation_location,
+        // do not send helper field to API
+        installation_location_other: undefined,
+      });
       setToast({ message: "Solar site registered.", type: "success" });
       setTimeout(() => navigate(tehsilRoutes.solarSites), 1200);
     } catch (err: unknown) {
@@ -193,7 +210,7 @@ const SolarSystemForm = () => {
     {
       id: 2,
       label: "PV Assets",
-      hint: "Capture capacity and commissioning details",
+      hint: "Capture capacity and connection details",
     },
     {
       id: 3,
@@ -211,9 +228,14 @@ const SolarSystemForm = () => {
       "solar_panel_capacity",
       "inverter_capacity",
       "inverter_serial_number",
-      "installation_date",
+      "solar_connection_date",
     ],
-    3: ["meter_model", "meter_serial_number", "green_meter_connection_date"],
+    3: [
+      "meter_model",
+      "meter_serial_number",
+      "electricity_connection_date",
+      "green_connection_date",
+    ],
   };
 
   const FIELD_LABELS: Record<keyof typeof formData, string> = {
@@ -223,13 +245,15 @@ const SolarSystemForm = () => {
     latitude: "Latitude",
     longitude: "Longitude",
     installation_location: "Installation Type",
+    installation_location_other: "Installation Type (Other)",
     solar_panel_capacity: "PV Capacity",
     inverter_capacity: "Inverter Capacity",
     inverter_serial_number: "Inverter Serial",
-    installation_date: "Commissioning Date",
+    solar_connection_date: "Solar Connection Date",
+    electricity_connection_date: "Electricity Connection Date",
+    green_connection_date: "Green Connection Date",
     meter_model: "Meter Model",
     meter_serial_number: "Meter Serial",
-    green_meter_connection_date: "Green Meter Connection Date",
     remarks: "Technical Remarks",
   };
 
@@ -238,6 +262,15 @@ const SolarSystemForm = () => {
     const missing = requiredFields.filter(
       (field) => !String(formData[field]).trim(),
     );
+
+    if (
+      stepToValidate === 1 &&
+      requiredFields.includes("installation_location") &&
+      formData.installation_location === "Other" &&
+      !formData.installation_location_other.trim()
+    ) {
+      missing.push("installation_location_other");
+    }
 
     if (missing.length === 0) return true;
 
@@ -320,7 +353,7 @@ const SolarSystemForm = () => {
                 {activeStep === 1
                   ? "Pick where the solar site is installed."
                   : activeStep === 2
-                    ? "Capacity and commissioning details."
+                    ? "Capacity and solar connection details."
                     : "Meter details and grid connection date."}
               </CardDescription>
             </CardHeader>
@@ -489,13 +522,50 @@ const SolarSystemForm = () => {
                       Installation Type
                       <RequiredMark />
                     </Label>
-                    <Input
-                      name="installation_location"
-                      value={formData.installation_location}
-                      onChange={handleChange}
-                      placeholder="Ground mounted, rooftop, etc."
-                      className="h-11"
-                    />
+                    <Select
+                      value={
+                        (INSTALLATION_TYPE_OPTIONS as readonly string[]).includes(
+                          formData.installation_location,
+                        )
+                          ? formData.installation_location
+                          : formData.installation_location
+                            ? "Other"
+                            : "__empty__"
+                      }
+                      onValueChange={(v) => {
+                        if (v == null) return;
+                        const next = v === "__empty__" ? "" : v;
+                        setFormData((prev) => ({
+                          ...prev,
+                          installation_location: next,
+                          installation_location_other:
+                            next === "Other" ? prev.installation_location_other : "",
+                        }));
+                      }}
+                    >
+                      <SelectTrigger className="h-11 w-full">
+                        <SelectValue placeholder="Select installation type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__empty__">
+                          Select installation type
+                        </SelectItem>
+                        {INSTALLATION_TYPE_OPTIONS.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {t}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {formData.installation_location === "Other" ? (
+                      <Input
+                        name="installation_location_other"
+                        value={formData.installation_location_other}
+                        onChange={handleChange}
+                        placeholder="Type installation type"
+                        className="h-11"
+                      />
+                    ) : null}
                     <p className="text-xs text-muted-foreground">
                       Example: rooftop / ground-mounted / canal-side.
                     </p>
@@ -549,13 +619,13 @@ const SolarSystemForm = () => {
                   </div>
                   <div className="space-y-2">
                     <Label>
-                      Commissioning Date
+                      Solar Connection Date
                       <RequiredMark />
                     </Label>
                     <Input
                       type="date"
-                      name="installation_date"
-                      value={formData.installation_date}
+                      name="solar_connection_date"
+                      value={formData.solar_connection_date}
                       onChange={handleChange}
                       className="h-11"
                     />
@@ -592,13 +662,26 @@ const SolarSystemForm = () => {
                     </div>
                     <div className="space-y-2">
                       <Label>
-                        Green Meter Connection Date
+                        Electricity Connection Date
                         <RequiredMark />
                       </Label>
                       <Input
                         type="date"
-                        name="green_meter_connection_date"
-                        value={formData.green_meter_connection_date}
+                        name="electricity_connection_date"
+                        value={formData.electricity_connection_date}
+                        onChange={handleChange}
+                        className="h-11"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>
+                        Green Connection Date
+                        <RequiredMark />
+                      </Label>
+                      <Input
+                        type="date"
+                        name="green_connection_date"
+                        value={formData.green_connection_date}
                         onChange={handleChange}
                         className="h-11"
                       />

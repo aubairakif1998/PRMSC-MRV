@@ -66,7 +66,7 @@ export default function SolarSites() {
     try {
       if (soft) setRefreshing(true);
       else setLoading(true);
-      const data = await getSolarSystems();
+      const data = await getSolarSystems({});
       setSites(Array.isArray(data) ? (data as SolarSystemRow[]) : []);
     } catch (e: unknown) {
       toast.error(getApiErrorMessage(e, "Could not load solar sites"));
@@ -332,9 +332,14 @@ export default function SolarSites() {
                   </div>
                   <div className="flex justify-between gap-3">
                     <span className="text-muted-foreground">
-                      Installation date
+                      Solar connection date
                     </span>
-                    <span>{kv(detailSite.installation_date)}</span>
+                    <span>
+                      {kv(
+                        detailSite.solar_connection_date ??
+                          detailSite.installation_date,
+                      )}
+                    </span>
                   </div>
                   <div className="flex justify-between gap-3">
                     <span className="text-muted-foreground">Monthly logs</span>

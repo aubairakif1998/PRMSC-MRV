@@ -257,9 +257,16 @@ class SolarSystem(db.Model):
     solar_panel_capacity = db.Column(db.Float)
     inverter_capacity = db.Column(db.Float)
     inverter_serial_number = db.Column(db.String(100))
+    # Dates
+    # Legacy field kept for backward compatibility with older clients.
     installation_date = db.Column(db.Date)
+    # New fields
+    solar_connection_date = db.Column(db.Date)
+    electricity_connection_date = db.Column(db.Date)
+    green_connection_date = db.Column(db.Date)
     meter_model = db.Column(db.String(100))
     meter_serial_number = db.Column(db.String(100))
+    # Legacy field kept for backward compatibility with older clients.
     green_meter_connection_date = db.Column(db.Date)
     remarks = db.Column(db.Text)
     created_by = db.Column(db.String(36), db.ForeignKey('users.id'))

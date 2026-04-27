@@ -919,6 +919,14 @@ def add_solar_system():
 
     existing_system = find_solar_system_by_location(ct, village, settlement_raw)
 
+    solar_connection_date = parse_date(
+        data.get("solar_connection_date") or data.get("installation_date")
+    )
+    electricity_connection_date = parse_date(data.get("electricity_connection_date"))
+    green_connection_date = parse_date(
+        data.get("green_connection_date") or data.get("green_meter_connection_date")
+    )
+
     if existing_system:
         try:
             assert_user_may_access_tehsil(user, existing_system.tehsil, for_write=True)
@@ -944,14 +952,16 @@ def add_solar_system():
         existing_system.inverter_serial_number = _coerce_optional_str(
             data.get("inverter_serial_number")
         )
-        existing_system.installation_date = parse_date(data.get("installation_date"))
+        # Persist new date fields (also keep legacy columns in sync).
+        existing_system.solar_connection_date = solar_connection_date
+        existing_system.electricity_connection_date = electricity_connection_date
+        existing_system.green_connection_date = green_connection_date
+        existing_system.installation_date = solar_connection_date
         existing_system.meter_model = _coerce_optional_str(data.get("meter_model"))
         existing_system.meter_serial_number = _coerce_optional_str(
             data.get("meter_serial_number")
         )
-        existing_system.green_meter_connection_date = parse_date(
-            data.get("green_meter_connection_date")
-        )
+        existing_system.green_meter_connection_date = green_connection_date
         existing_system.remarks = _coerce_optional_str(data.get("remarks"))
         
         try:
@@ -979,10 +989,14 @@ def add_solar_system():
         solar_panel_capacity=data.get('solar_panel_capacity'),
         inverter_capacity=data.get('inverter_capacity'),
         inverter_serial_number=data.get('inverter_serial_number'),
-        installation_date=parse_date(data.get('installation_date')),
+        # Dates (keep legacy columns populated for older clients).
+        solar_connection_date=solar_connection_date,
+        electricity_connection_date=electricity_connection_date,
+        green_connection_date=green_connection_date,
+        installation_date=solar_connection_date,
         meter_model=data.get('meter_model'),
         meter_serial_number=data.get('meter_serial_number'),
-        green_meter_connection_date=parse_date(data.get('green_meter_connection_date')),
+        green_meter_connection_date=green_connection_date,
         remarks=data.get('remarks'),
         created_by=get_jwt_identity()
     )
@@ -1338,6 +1352,15 @@ def get_solar_systems():
                 "solar_panel_capacity": s.solar_panel_capacity,
                 "inverter_capacity": s.inverter_capacity,
                 "inverter_serial_number": s.inverter_serial_number,
+                "solar_connection_date": s.solar_connection_date.isoformat()
+                if s.solar_connection_date
+                else None,
+                "electricity_connection_date": s.electricity_connection_date.isoformat()
+                if s.electricity_connection_date
+                else None,
+                "green_connection_date": s.green_connection_date.isoformat()
+                if s.green_connection_date
+                else None,
                 "installation_date": s.installation_date.isoformat()
                 if s.installation_date
                 else None,
@@ -1426,6 +1449,15 @@ def get_solar_system(system_id):
                 "solar_panel_capacity": system.solar_panel_capacity,
                 "inverter_capacity": system.inverter_capacity,
                 "inverter_serial_number": system.inverter_serial_number,
+                "solar_connection_date": system.solar_connection_date.isoformat()
+                if system.solar_connection_date
+                else None,
+                "electricity_connection_date": system.electricity_connection_date.isoformat()
+                if system.electricity_connection_date
+                else None,
+                "green_connection_date": system.green_connection_date.isoformat()
+                if system.green_connection_date
+                else None,
                 "installation_date": system.installation_date.isoformat()
                 if system.installation_date
                 else None,
@@ -1497,16 +1529,35 @@ def update_solar_system(system_id):
         system.inverter_serial_number = _coerce_optional_str(
             data.get("inverter_serial_number")
         )
-    if "installation_date" in data:
-        system.installation_date = parse_date(data.get("installation_date"))
+    # Dates: new keys preferred; keep legacy columns in sync.
+    solar_connection_date = (
+        parse_date(data.get("solar_connection_date"))
+        if "solar_connection_date" in data
+        else None
+    )
+    if solar_connection_date is None and "installation_date" in data:
+        solar_connection_date = parse_date(data.get("installation_date"))
+    if solar_connection_date is not None:
+        system.solar_connection_date = solar_connection_date
+        system.installation_date = solar_connection_date
+    if "electricity_connection_date" in data:
+        system.electricity_connection_date = parse_date(
+            data.get("electricity_connection_date")
+        )
     if "meter_model" in data:
         system.meter_model = _coerce_optional_str(data.get("meter_model"))
     if "meter_serial_number" in data:
         system.meter_serial_number = _coerce_optional_str(data.get("meter_serial_number"))
-    if "green_meter_connection_date" in data:
-        system.green_meter_connection_date = parse_date(
-            data.get("green_meter_connection_date")
-        )
+    green_connection_date = (
+        parse_date(data.get("green_connection_date"))
+        if "green_connection_date" in data
+        else None
+    )
+    if green_connection_date is None and "green_meter_connection_date" in data:
+        green_connection_date = parse_date(data.get("green_meter_connection_date"))
+    if green_connection_date is not None:
+        system.green_connection_date = green_connection_date
+        system.green_meter_connection_date = green_connection_date
     if "remarks" in data:
         system.remarks = _coerce_optional_str(data.get("remarks"))
 
@@ -1563,6 +1614,9 @@ def get_solar_system_config():
                 "solar_panel_capacity": system.solar_panel_capacity,
                 "inverter_capacity": system.inverter_capacity,
                 "inverter_serial_number": system.inverter_serial_number,
+                "solar_connection_date": system.solar_connection_date.isoformat() if system.solar_connection_date else None,
+                "electricity_connection_date": system.electricity_connection_date.isoformat() if system.electricity_connection_date else None,
+                "green_connection_date": system.green_connection_date.isoformat() if system.green_connection_date else None,
                 "installation_date": system.installation_date.isoformat() if system.installation_date else None,
                 "meter_model": system.meter_model,
                 "meter_serial_number": system.meter_serial_number,
