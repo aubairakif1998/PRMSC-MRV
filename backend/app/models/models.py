@@ -202,7 +202,6 @@ class WaterSystem(db.Model):
     meter_model = db.Column(db.String(100))
     meter_serial_number = db.Column(db.String(100))
     meter_accuracy_class = db.Column(db.String(50))
-    calibration_requirement = db.Column(db.Text)
     installation_date = db.Column(db.Date)
     created_by = db.Column(db.String(36), db.ForeignKey('users.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -210,6 +209,30 @@ class WaterSystem(db.Model):
 
     records = db.relationship(
         "WaterEnergyLoggingDaily", backref="system", lazy=True
+    )
+
+
+class WaterSystemCalibrationCertificate(db.Model):
+    """Calibration certificate metadata for one water system (1:N)."""
+
+    __tablename__ = "water_system_calibration_certificates"
+
+    id = db.Column(db.String(36), primary_key=True, default=get_uuid)
+    water_system_id = db.Column(
+        db.String(36),
+        db.ForeignKey("water_systems.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    file_url = db.Column(db.Text, nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    expiry_date = db.Column(db.Date, nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    water_system = db.relationship(
+        "WaterSystem",
+        backref=db.backref("calibration_certificates", lazy="selectin"),
     )
 
 

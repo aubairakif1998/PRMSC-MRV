@@ -86,7 +86,6 @@ type DetailResponse = {
       meter_model?: string | null;
       meter_serial_number?: string | null;
       meter_accuracy_class?: string | null;
-      calibration_requirement?: string | null;
       installation_date?: string | null;
     };
   };

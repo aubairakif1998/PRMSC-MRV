@@ -59,7 +59,6 @@ def build_water_submission_detail_response(submission: Submission) -> dict:
                 "meter_model": system.meter_model if system else None,
                 "meter_serial_number": system.meter_serial_number if system else None,
                 "meter_accuracy_class": system.meter_accuracy_class if system else None,
-                "calibration_requirement": system.calibration_requirement if system else None,
                 "installation_date": system.installation_date.isoformat()
                 if system and system.installation_date
                 else None,

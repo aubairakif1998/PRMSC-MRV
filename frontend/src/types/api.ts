@@ -34,6 +34,17 @@ export type WaterSystemRow = {
   updated_at?: string | null;
 };
 
+export type WaterSystemCalibrationCertificate = {
+  id: string;
+  water_system_id: string;
+  file_url: string;
+  uploaded_at?: string | null;
+  expiry_date?: string | null;
+  is_active?: boolean | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type SolarSystemRow = {
   id: string;
   tehsil: string;

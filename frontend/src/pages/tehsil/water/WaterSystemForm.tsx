@@ -104,7 +104,6 @@ const WaterSystemForm = () => {
     meter_model: "",
     meter_serial_number: "",
     meter_accuracy_class: "",
-    calibration_requirement: "",
     installation_date: "",
   });
 
@@ -246,7 +245,6 @@ const WaterSystemForm = () => {
     meter_model: "Meter Model",
     meter_serial_number: "Meter Serial Number",
     meter_accuracy_class: "Accuracy Class",
-    calibration_requirement: "Calibration Notes",
     installation_date: "Installation Date",
   };
 
@@ -259,7 +257,6 @@ const WaterSystemForm = () => {
               "meter_model",
               "meter_serial_number",
               "meter_accuracy_class",
-              "calibration_requirement",
               "installation_date",
             ] as Array<keyof typeof formData>)
           : ([
@@ -802,19 +799,6 @@ const WaterSystemForm = () => {
                           disabled={loading}
                         />
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>
-                        Calibration notes <RequiredMark />
-                      </Label>
-                      <Textarea
-                        name="calibration_requirement"
-                        value={formData.calibration_requirement}
-                        onChange={handleChange}
-                        placeholder="Frequency, last calibration, etc."
-                        className="min-h-24 resize-none"
-                        disabled={loading}
-                      />
                     </div>
                   </>
                 )}

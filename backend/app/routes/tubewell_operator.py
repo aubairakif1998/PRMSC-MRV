@@ -347,12 +347,12 @@ def upload_image():
 
     record_type = request.form.get('record_type', 'water')
 
-    if record_type == "solar":
+    if record_type in ("solar", "water_calibration"):
         if user_role_code(user) != ADMIN:
             return (
                 jsonify(
                     {
-                        "message": "Solar evidence upload requires tehsil manager role",
+                        "message": "This evidence upload requires tehsil manager role",
                     }
                 ),
                 403,
@@ -390,7 +390,12 @@ def upload_image():
     if not allowed_file(file.filename):
         return jsonify({"message": "File type not allowed. Use PNG, JPG, JPEG, GIF, or PDF."}), 400
 
-    folder = 'water-images' if record_type == 'water' else 'solar-images'
+    if record_type == "solar":
+        folder = "solar-images"
+    elif record_type == "water_calibration":
+        folder = "water-calibration-certificates"
+    else:
+        folder = "water-images"
     try:
         upload_result = StorageService.upload_file_storage(
             file_storage=file,
@@ -540,7 +545,6 @@ def get_water_system_config():
                 "meter_model": system.meter_model,
                 "meter_serial_number": system.meter_serial_number,
                 "meter_accuracy_class": system.meter_accuracy_class,
-                "calibration_requirement": system.calibration_requirement,
                 "installation_date": system.installation_date.isoformat() if system.installation_date else None,
             }
         }), 200

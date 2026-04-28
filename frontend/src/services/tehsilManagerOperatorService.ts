@@ -26,6 +26,33 @@ export const getWaterSystem = async (systemId: string | number) => {
   return response.data;
 };
 
+export const getWaterSystemCalibrationCertificate = async (
+  systemId: string | number,
+) => {
+  const response = await api.get(
+    `/operator/water-system/${systemId}/calibration-certificate`,
+  );
+  return response.data;
+};
+
+export const putWaterSystemCalibrationCertificate = async (
+  systemId: string | number,
+  payload: AnyRecord,
+) => {
+  const response = await api.put(
+    `/operator/water-system/${systemId}/calibration-certificate`,
+    payload,
+  );
+  return response.data;
+};
+
+export const getActiveWaterSystemCalibrationCertificates = async () => {
+  const response = await api.get(
+    "/operator/water-system-calibration-certificates/active",
+  );
+  return response.data;
+};
+
 export const getWaterSystemConfig = async (
   tehsil: string,
   village: string,

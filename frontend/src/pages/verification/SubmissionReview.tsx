@@ -107,7 +107,6 @@ type SubmissionSystem = {
   meter_model?: string;
   meter_serial_number?: string;
   meter_accuracy_class?: string;
-  calibration_requirement?: string;
   green_meter_connection_date?: string;
 };
 
@@ -591,12 +590,7 @@ const SubmissionReview = () => {
                         recordData?.system?.meter_accuracy_class,
                       )}
                     />
-                    <MetaItem
-                      label="Calibration Requirement"
-                      value={infoValue(
-                        recordData?.system?.calibration_requirement,
-                      )}
-                    />
+                    {/* Calibration notes removed from water system schema */}
                   </>
                 ) : (
                   <>

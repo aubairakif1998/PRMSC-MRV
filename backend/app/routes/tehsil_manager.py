@@ -9,6 +9,7 @@ from sqlalchemy import extract
 from app.constants.tehsils import canonical_tehsil
 from app.models.models import (
     WaterSystem,
+    WaterSystemCalibrationCertificate,
     WaterEnergyLoggingDaily,
     SolarSystem,
     SolarEnergyLoggingMonthly,
@@ -789,9 +790,6 @@ def add_water_system():
         existing_system.meter_accuracy_class = _coerce_optional_str(
             data.get("meter_accuracy_class")
         )
-        existing_system.calibration_requirement = _coerce_optional_str(
-            data.get("calibration_requirement")
-        )
         existing_system.installation_date = parse_date(data.get('installation_date'))
         # Meter installed toggle + alternative fields
         bmi = _coerce_optional_bool(data.get("bulk_meter_installed"))
@@ -818,7 +816,6 @@ def add_water_system():
                 "meter_model": existing_system.meter_model,
                 "meter_serial_number": existing_system.meter_serial_number,
                 "meter_accuracy_class": existing_system.meter_accuracy_class,
-                "calibration_requirement": existing_system.calibration_requirement,
                 "installation_date": existing_system.installation_date.isoformat()
                 if existing_system.installation_date
                 else None,
@@ -879,7 +876,6 @@ def add_water_system():
         meter_model=data.get('meter_model'),
         meter_serial_number=data.get('meter_serial_number'),
         meter_accuracy_class=data.get('meter_accuracy_class'),
-        calibration_requirement=data.get('calibration_requirement'),
         installation_date=parse_date(data.get('installation_date')),
         created_by=get_jwt_identity()
     )
@@ -1084,7 +1080,6 @@ def _validate_water_system_meter_logic(payload: dict) -> tuple[bool, str | None]
                 "meter_model",
                 "meter_serial_number",
                 "meter_accuracy_class",
-                "calibration_requirement",
                 "installation_date",
             ],
         )
@@ -1173,10 +1168,6 @@ def update_water_system(system_id):
         system.meter_serial_number = _coerce_optional_str(data.get("meter_serial_number"))
     if "meter_accuracy_class" in data:
         system.meter_accuracy_class = _coerce_optional_str(data.get("meter_accuracy_class"))
-    if "calibration_requirement" in data:
-        system.calibration_requirement = _coerce_optional_str(
-            data.get("calibration_requirement")
-        )
     if "installation_date" in data:
         system.installation_date = parse_date(data.get("installation_date"))
     # Alternative fields for no-bulk-meter systems
@@ -1200,7 +1191,6 @@ def update_water_system(system_id):
             "meter_model": system.meter_model,
             "meter_serial_number": system.meter_serial_number,
             "meter_accuracy_class": system.meter_accuracy_class,
-            "calibration_requirement": system.calibration_requirement,
             "installation_date": system.installation_date.isoformat()
             if system.installation_date
             else None,
@@ -1273,7 +1263,6 @@ def get_water_system(system_id):
                 "meter_model": system.meter_model,
                 "meter_serial_number": system.meter_serial_number,
                 "meter_accuracy_class": system.meter_accuracy_class,
-                "calibration_requirement": system.calibration_requirement,
                 "installation_date": system.installation_date.isoformat()
                 if system.installation_date
                 else None,
@@ -1284,6 +1273,164 @@ def get_water_system(system_id):
         ),
         200,
     )
+
+
+@tehsil_manager_bp.route("/water-system/<system_id>/calibration-certificate", methods=["GET"])
+@jwt_required()
+@min_role_required("ADMIN")
+def get_water_system_calibration_certificate(system_id):
+    """List calibration certificates for a water system (tehsil-scoped)."""
+    user = UserService.get_user_by_id(get_jwt_identity())
+    system = WaterSystem.query.get(system_id)
+    if not system:
+        return jsonify({"message": "Water system not found"}), 404
+    try:
+        assert_user_may_access_water_system(user, system)
+    except TehsilAccessDenied:
+        return jsonify({"message": "Access denied for this water system"}), 403
+
+    certs = (
+        WaterSystemCalibrationCertificate.query.filter_by(water_system_id=system.id)
+        .order_by(WaterSystemCalibrationCertificate.uploaded_at.desc())
+        .all()
+    )
+    return (
+        jsonify(
+            [
+                {
+                    "id": str(c.id),
+                    "water_system_id": str(c.water_system_id),
+                    "file_url": c.file_url,
+                    "uploaded_at": c.uploaded_at.isoformat() if c.uploaded_at else None,
+                    "expiry_date": c.expiry_date.isoformat() if c.expiry_date else None,
+                    "is_active": bool(getattr(c, "is_active", False)),
+                    "created_at": c.created_at.isoformat() if c.created_at else None,
+                    "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+                }
+                for c in certs
+            ]
+        ),
+        200,
+    )
+
+
+@tehsil_manager_bp.route("/water-system/<system_id>/calibration-certificate", methods=["PUT"])
+@jwt_required()
+@min_role_required("ADMIN")
+def put_water_system_calibration_certificate(system_id):
+    """Create a new calibration certificate record for a water system (tehsil-scoped)."""
+    user = UserService.get_user_by_id(get_jwt_identity())
+    system = WaterSystem.query.get(system_id)
+    if not system:
+        return jsonify({"message": "Water system not found"}), 404
+    try:
+        assert_user_may_access_water_system(user, system, for_write=True)
+    except TehsilAccessDenied:
+        return jsonify({"message": "Access denied for this water system"}), 403
+
+    data = request.get_json(silent=True) or {}
+    file_url = (data.get("file_url") or "").strip()
+    if not file_url:
+        return jsonify({"message": "file_url is required"}), 400
+
+    expiry_raw = (data.get("expiry_date") or "").strip()
+    if not expiry_raw:
+        return jsonify({"message": "expiry_date is required (YYYY-MM-DD)"}), 400
+    expiry_date = parse_date(expiry_raw)
+    if not expiry_date:
+        return jsonify({"message": "Invalid expiry_date; use YYYY-MM-DD"}), 400
+
+    # Enforce one active certificate per water system.
+    WaterSystemCalibrationCertificate.query.filter_by(
+        water_system_id=system.id, is_active=True
+    ).update({"is_active": False})
+
+    cert = WaterSystemCalibrationCertificate(
+        water_system_id=system.id,
+        file_url=file_url,
+        uploaded_at=datetime.utcnow(),
+        expiry_date=expiry_date,
+        is_active=True,
+    )
+    db.session.add(cert)
+
+    db.session.commit()
+    return (
+        jsonify(
+            {
+                "message": "Calibration certificate saved",
+                "id": str(cert.id),
+                "water_system_id": str(cert.water_system_id),
+                "uploaded_at": cert.uploaded_at.isoformat() if cert.uploaded_at else None,
+                "expiry_date": cert.expiry_date.isoformat() if cert.expiry_date else None,
+            }
+        ),
+        200,
+    )
+
+
+@tehsil_manager_bp.route(
+    "/water-system-calibration-certificates/active", methods=["GET"]
+)
+@jwt_required()
+@min_role_required("ADMIN")
+def list_active_water_system_calibration_certificates():
+    """
+    Active calibration certificates for water systems in scope.
+    One row per water system (the active certificate only).
+    """
+    user = UserService.get_user_by_id(get_jwt_identity())
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    jwt_scope_tehsils = _scope_tehsils_from_jwt()
+    q = (
+        db.session.query(WaterSystem, WaterSystemCalibrationCertificate)
+        .join(
+            WaterSystemCalibrationCertificate,
+            WaterSystemCalibrationCertificate.water_system_id == WaterSystem.id,
+        )
+        .filter(WaterSystemCalibrationCertificate.is_active.is_(True))
+    )
+    if jwt_scope_tehsils:
+        q = q.filter(WaterSystem.tehsil.in_(jwt_scope_tehsils))
+
+    rows = q.order_by(
+        WaterSystem.tehsil.asc(),
+        WaterSystem.village.asc(),
+        WaterSystem.unique_identifier.asc(),
+    ).all()
+
+    out = []
+    for ws, cert in rows:
+        try:
+            assert_user_may_access_water_system(user, ws)
+        except TehsilAccessDenied:
+            continue
+        out.append(
+            {
+                "water_system": {
+                    "id": str(ws.id),
+                    "unique_identifier": ws.unique_identifier,
+                    "tehsil": ws.tehsil,
+                    "village": ws.village,
+                    "settlement": ws.settlement or "",
+                },
+                "certificate": {
+                    "id": str(cert.id),
+                    "water_system_id": str(cert.water_system_id),
+                    "file_url": cert.file_url,
+                    "uploaded_at": cert.uploaded_at.isoformat()
+                    if cert.uploaded_at
+                    else None,
+                    "expiry_date": cert.expiry_date.isoformat()
+                    if cert.expiry_date
+                    else None,
+                },
+            }
+        )
+
+    return jsonify(out), 200
 
 
 @tehsil_manager_bp.route('/water-system/<system_id>', methods=['DELETE'])

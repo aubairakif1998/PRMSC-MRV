@@ -27,6 +27,7 @@ import WaterSystemForm from "./pages/tehsil/water/WaterSystemForm";
 import WaterSystemEditPage from "./pages/tehsil/water/systems/WaterSystemEditPage";
 import WaterSystems from "./pages/tehsil/water/WaterSystems";
 import WaterAlertsPage from "./pages/tehsil/water/WaterAlertsPage";
+import CalibrationCertificates from "./pages/tehsil/water/CalibrationCertificates";
 import SolarSites from "./pages/tehsil/solar/SolarSites";
 import SolarSystemForm from "./pages/tehsil/solar/SolarSystemForm";
 import SolarSiteEditPage from "./pages/tehsil/solar/sites/SolarSiteEditPage";
@@ -209,6 +210,15 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={[...TEHSIL_MANAGER_ROLES]}>
                   <WaterSystems />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/tehsil/calibration-certificates"
+              element={
+                <ProtectedRoute allowedRoles={[...TEHSIL_MANAGER_ROLES]}>
+                  <CalibrationCertificates />
                 </ProtectedRoute>
               }
             />

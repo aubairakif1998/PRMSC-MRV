@@ -10,6 +10,7 @@ import {
   Database,
   Droplets,
   FileCheck,
+  FileText,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -91,6 +92,11 @@ const MainLayout = () => {
               path: tehsilRoutes.waterSystems,
               icon: <Droplets className="size-4" />,
               label: "Water systems",
+            },
+            {
+              path: tehsilRoutes.calibrationCertificates,
+              icon: <FileText className="size-4" />,
+              label: "Calibration certificates",
             },
             {
               path: tehsilRoutes.waterSubmissions,
