@@ -128,10 +128,11 @@ export async function drainQueue(): Promise<DrainQueueResult> {
   while (queue.length > 0) {
     const item = queue[0]
     const nextAttempt = (item.attemptCount ?? 0) + 1
+    const noBulkMeterInstalled = item.payload?.noBulkMeterInstalled === true
     result.processed += 1
     try {
       let imageUrl: string | undefined
-      if (item.evidence) {
+      if (!noBulkMeterInstalled && item.evidence) {
         const up = await uploadEvidenceFile('water', item.evidence)
         const u = up.image_url
         const p = up.path
@@ -144,6 +145,7 @@ export async function drainQueue(): Promise<DrainQueueResult> {
       }
       if (item.type === 'water') {
         const keep =
+          !noBulkMeterInstalled &&
           !imageUrl &&
           'existingImageUrl' in item &&
           typeof item.existingImageUrl === 'string' &&
@@ -156,6 +158,7 @@ export async function drainQueue(): Promise<DrainQueueResult> {
         })
       } else if (item.type === 'water_draft') {
         const keep =
+          !noBulkMeterInstalled &&
           !imageUrl &&
           'existingImageUrl' in item &&
           typeof item.existingImageUrl === 'string' &&

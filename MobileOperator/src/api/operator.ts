@@ -218,6 +218,7 @@ export type WaterDraftSummary = {
 export type WaterDraftDetail = {
   id: string;
   water_system_id?: string;
+  bulk_meter_installed?: boolean | null;
   year?: number | null;
   month?: number | null;
   day?: number | null;

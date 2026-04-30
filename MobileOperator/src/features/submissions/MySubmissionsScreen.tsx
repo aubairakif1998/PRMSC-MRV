@@ -7,6 +7,7 @@ import {
   ListRenderItem,
   Platform,
   RefreshControl,
+  ScrollView,
   View,
 } from 'react-native';
 import {
@@ -41,6 +42,9 @@ import type { QueueItem } from '../../types/operator';
 const STATUS = ['all', 'submitted', 'verified', 'rejected'] as const;
 
 type Submission = Record<string, unknown>;
+type ListRow =
+  | { kind: 'section'; key: string; title: string }
+  | { kind: 'item'; key: string; submission: Submission };
 
 function formatLocation(submission: Submission): string {
   const info = (submission.system_info || {}) as Record<string, unknown>;
@@ -75,6 +79,21 @@ function getSubmittedAt(item: Submission): unknown {
 function filterLabel(s: (typeof STATUS)[number]): string {
   if (s === 'all') return 'All';
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function normalizedStatus(raw: unknown): string {
+  return String(raw ?? '')
+    .trim()
+    .toLowerCase();
+}
+
+function statusLabel(raw: unknown): string {
+  const s = normalizedStatus(raw);
+  if (!s) return 'Unknown';
+  if (s === 'verified') return 'Verified';
+  if (s === 'rejected') return 'Rejected';
+  if (s === 'submitted') return 'Submitted';
+  return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function getStatusVariant(status: string) {
@@ -140,17 +159,97 @@ export function MySubmissionsScreen() {
   };
 
   const statusLine = useMemo(
-    () => `Filtered by: ${filterLabel(status)}`,
-    [status],
+    () =>
+      `Showing ${items.length} ${
+        items.length === 1 ? 'submission' : 'submissions'
+      } · ${filterLabel(status)}`,
+    [items.length, status],
   );
 
-  const renderItem: ListRenderItem<Submission> = useCallback(
+  const statusCounts = useMemo(() => {
+    const counts: Record<(typeof STATUS)[number], number> = {
+      all: items.length,
+      submitted: 0,
+      verified: 0,
+      rejected: 0,
+    };
+    for (const item of items) {
+      const s = normalizedStatus(item.status);
+      if (s === 'submitted') counts.submitted += 1;
+      else if (s === 'verified') counts.verified += 1;
+      else if (s === 'rejected') counts.rejected += 1;
+    }
+    return counts;
+  }, [items]);
+
+  const totalQueued = queuedItems.length;
+
+  const listRows = useMemo<ListRow[]>(() => {
+    const rows: ListRow[] = [];
+    const withDate = [...items].sort((a, b) => {
+      const aTs = Date.parse(String(getSubmittedAt(a) ?? ''));
+      const bTs = Date.parse(String(getSubmittedAt(b) ?? ''));
+      const av = Number.isNaN(aTs) ? 0 : aTs;
+      const bv = Number.isNaN(bTs) ? 0 : bTs;
+      return bv - av;
+    });
+
+    const today = new Date();
+    const startOfToday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate(),
+    ).getTime();
+    const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000;
+    let activeSection = '';
+
+    for (let idx = 0; idx < withDate.length; idx += 1) {
+      const submission = withDate[idx];
+      const sid = String(submission.id ?? idx);
+      const rawTs = Date.parse(String(getSubmittedAt(submission) ?? ''));
+      const ts = Number.isNaN(rawTs) ? 0 : rawTs;
+
+      let sectionTitle = 'Earlier';
+      if (ts >= startOfToday) sectionTitle = 'Today';
+      else if (ts >= startOfYesterday) sectionTitle = 'Yesterday';
+
+      if (sectionTitle !== activeSection) {
+        activeSection = sectionTitle;
+        rows.push({
+          kind: 'section',
+          key: `section-${sectionTitle}-${idx}`,
+          title: sectionTitle,
+        });
+      }
+
+      rows.push({
+        kind: 'item',
+        key: `item-${sid}-${idx}`,
+        submission,
+      });
+    }
+
+    return rows;
+  }, [items]);
+
+  const renderItem: ListRenderItem<ListRow> = useCallback(
     ({ item }) => {
-      const rowStatus = String(item.status ?? '—');
-      const kind = submissionKind(item.submission_type);
+      if (item.kind === 'section') {
+        return (
+          <View className="mb-2 mt-1 px-1">
+            <Text className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {item.title}
+            </Text>
+          </View>
+        );
+      }
+
+      const submission = item.submission;
+      const rowStatus = String(submission.status ?? '—');
+      const kind = submissionKind(submission.submission_type);
       const TypeIcon = kind === 'water' ? Droplets : Inbox;
       const iconColor = kind === 'water' ? '#0369a1' : '#64748b';
-      const sid = String(item.id ?? '');
+      const sid = String(submission.id ?? '');
 
       return (
         <Card className="mb-3 overflow-hidden border-border/80 py-0 shadow-sm shadow-black/5">
@@ -161,20 +260,20 @@ export function MySubmissionsScreen() {
                   <TypeIcon size={18} color={iconColor} strokeWidth={2} />
                 </View>
                 <View className="min-w-0 flex-1">
-                  <Text className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     Submission
                   </Text>
                   <CardTitle className="text-base leading-tight">
-                    {formatSubmissionType(item.submission_type)}
+                    {formatSubmissionType(submission.submission_type)}
                   </CardTitle>
                 </View>
               </View>
               <Badge variant={getStatusVariant(rowStatus)} className="shrink-0">
-                {rowStatus}
+                {statusLabel(rowStatus)}
               </Badge>
             </View>
             <Text className="font-mono text-xs text-muted-foreground">
-              ID {String(item.id ?? '—')}
+              ID {String(submission.id ?? '—')}
             </Text>
           </CardHeader>
           <Separator />
@@ -187,8 +286,8 @@ export function MySubmissionsScreen() {
                 <Text className="text-xs font-medium text-muted-foreground">
                   Location
                 </Text>
-                <Text className="text-sm font-medium text-foreground">
-                  {formatLocation(item)}
+                <Text className="text-sm font-semibold text-foreground">
+                  {formatLocation(submission)}
                 </Text>
               </View>
             </View>
@@ -201,31 +300,33 @@ export function MySubmissionsScreen() {
                   Submitted
                 </Text>
                 <Text className="text-sm text-foreground">
-                  {formatWhen(getSubmittedAt(item))}
+                  {formatWhen(getSubmittedAt(submission))}
                 </Text>
               </View>
             </View>
-            {typeof item.remarks === 'string' && item.remarks.trim() ? (
+            {typeof submission.remarks === 'string' &&
+            submission.remarks.trim() ? (
               <View className="rounded-md bg-muted/60 px-2 py-1.5">
                 <Text className="text-xs font-medium text-muted-foreground">
                   Remarks
                 </Text>
                 <Text className="text-sm text-foreground" numberOfLines={3}>
-                  {item.remarks}
+                  {submission.remarks}
                 </Text>
               </View>
             ) : null}
             <Separator />
             <Button
               variant="secondary"
-              className="w-full"
+              size="lg"
+              className="mt-1 w-full rounded-xl"
               onPress={() =>
                 navigation.navigate('SubmissionDetail', {
                   submissionId: sid,
                 })
               }
             >
-              <Text>View full details</Text>
+              <Text className="text-sm font-semibold">View full details</Text>
             </Button>
           </CardContent>
         </Card>
@@ -237,7 +338,6 @@ export function MySubmissionsScreen() {
   return (
     <KeyboardAvoidingView
       className="flex-1 bg-muted/30"
-      style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
     >
@@ -246,31 +346,53 @@ export function MySubmissionsScreen() {
           <MySubmissionsLoading />
         ) : (
           <>
-            <Text className="mb-3 text-sm leading-5 text-muted-foreground">
-              Verification status for data you have sent to the server.
-            </Text>
-            <Tabs
-              value={status}
-              onValueChange={v => setStatus(v as (typeof STATUS)[number])}
-            >
-              <TabsList className="mb-4 h-auto w-full flex-row flex-wrap justify-start gap-1 p-1">
-                {STATUS.map(s => (
-                  <TabsTrigger
-                    key={s}
-                    value={s}
-                    className="min-h-9 flex-1 px-2 sm:flex-none"
-                  >
-                    <Text className="text-xs font-semibold capitalize">
-                      {filterLabel(s)}
+            <Card className="mb-3 border-border/70 bg-card/95">
+              <CardContent className="gap-3 pt-4">
+                <View className="flex-row gap-2">
+                  <View className="flex-1 rounded-lg bg-muted px-3 py-2">
+                    <Text className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Total shown
                     </Text>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
+                    <Text className="text-lg font-bold text-foreground">
+                      {items.length}
+                    </Text>
+                  </View>
+                  <View className="flex-1 rounded-lg bg-muted px-3 py-2">
+                    <Text className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Offline queue
+                    </Text>
+                    <Text className="text-lg font-bold text-foreground">
+                      {totalQueued}
+                    </Text>
+                  </View>
+                </View>
+              </CardContent>
+            </Card>
+            <Tabs value={status} onValueChange={v => setStatus(v as (typeof STATUS)[number])}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                className="mb-4 pr-1"
+              >
+                <TabsList className="h-auto flex-row gap-2 bg-transparent p-0">
+                  {STATUS.map(s => (
+                    <TabsTrigger
+                      key={s}
+                      value={s}
+                      className="h-9 shrink-0 rounded-full border border-border/70 bg-card px-4"
+                    >
+                      <Text className="text-xs font-semibold capitalize">
+                        {filterLabel(s)} ({statusCounts[s]})
+                      </Text>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </ScrollView>
             </Tabs>
 
             <FlatList
-              data={items}
-              keyExtractor={(item, idx) => String(item.id ?? idx)}
+              data={listRows}
+              keyExtractor={item => item.key}
               contentContainerStyle={LIST_CONTENT_STYLE}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
@@ -334,7 +456,7 @@ export function MySubmissionsScreen() {
                       </View>
                     </Alert>
                   ) : (
-                    <Text className="text-xs font-medium text-muted-foreground">
+                    <Text className="text-sm font-medium text-muted-foreground">
                       {statusLine}
                     </Text>
                   )}

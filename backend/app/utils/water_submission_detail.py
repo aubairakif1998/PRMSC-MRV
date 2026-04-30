@@ -56,6 +56,7 @@ def build_water_submission_detail_response(submission: Submission) -> dict:
                 "depth_of_water_intake": system.depth_of_water_intake if system else None,
                 "height_to_ohr": system.height_to_ohr if system else None,
                 "pump_flow_rate": system.pump_flow_rate if system else None,
+                "bulk_meter_installed": system.bulk_meter_installed if system else None,
                 "meter_model": system.meter_model if system else None,
                 "meter_serial_number": system.meter_serial_number if system else None,
                 "meter_accuracy_class": system.meter_accuracy_class if system else None,

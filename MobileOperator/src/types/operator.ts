@@ -8,6 +8,8 @@ export type WaterLogInput = {
   tehsil: string
   village: string
   settlement?: string
+  /** Mirrors assigned system setting where bulk meter is not installed. */
+  noBulkMeterInstalled?: boolean
   /** Reading total from the water meter (m³). Maps to API `total_water_pumped`. */
   totalWaterPumping?: number | null
   /**

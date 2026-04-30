@@ -166,6 +166,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
   const [existingDraftImageUrl, setExistingDraftImageUrl] = useState<string | null>(null)
   const [draftImageLoadFailed, setDraftImageLoadFailed] = useState(false)
   const [signatureChecked, setSignatureChecked] = useState(false)
+  const [noBulkMeterInstalled, setNoBulkMeterInstalled] = useState(false)
   const [facilityPrefetching, setFacilityPrefetching] = useState(
     () => systemId != null && systemId !== '',
   )
@@ -195,6 +196,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       tehsil,
       village,
       settlement: settlement || undefined,
+      noBulkMeterInstalled,
       totalWaterPumping: totalWater ? Number(totalWater) : null,
       pumpStartTime: hasTimes ? normalizeTo24hWithSeconds(pumpStartTime) : null,
       pumpEndTime: hasTimes ? normalizeTo24hWithSeconds(pumpEndTime) : null,
@@ -204,6 +206,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     logDateIso,
     pumpEndTime,
     pumpStartTime,
+    noBulkMeterInstalled,
     settlement,
     tehsil,
     totalWater,
@@ -217,11 +220,15 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
 
   const loadDraftFromServer = async (id: string) => {
     const draft = await getWaterDraftById(id)
+    const hasBulkMeter = draft.bulk_meter_installed !== false
+    setNoBulkMeterInstalled(!hasBulkMeter)
     setDraftImageLoadFailed(false)
     setExistingDraftImageUrl(
-      typeof draft.bulk_meter_image_url === 'string' && draft.bulk_meter_image_url.trim()
-        ? normalizeRemoteImageUrl(draft.bulk_meter_image_url)
-        : null,
+      !hasBulkMeter
+        ? null
+        : typeof draft.bulk_meter_image_url === 'string' && draft.bulk_meter_image_url.trim()
+          ? normalizeRemoteImageUrl(draft.bulk_meter_image_url)
+          : null,
     )
     const wp: WaterLogInput = {
       year: Number(draft.year ?? currentYear),
@@ -251,6 +258,10 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     setVillage(wp.village ?? '')
     setSettlement(wp.settlement ?? '')
     setTotalWater(wp.totalWaterPumping != null ? String(wp.totalWaterPumping) : '')
+    if (!hasBulkMeter) {
+      setTotalWater('')
+      setAsset(null)
+    }
     setPumpStartTime(
       wp.pumpStartTime != null ? normalizeTo24hWithSeconds(String(wp.pumpStartTime)) : '',
     )
@@ -290,6 +301,13 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
         setVillage(typeof found.village === 'string' ? found.village : '')
         const s = found.settlement
         setSettlement(typeof s === 'string' ? s : s == null ? '' : String(s))
+        const hasBulkMeter = found.bulk_meter_installed !== false
+        setNoBulkMeterInstalled(!hasBulkMeter)
+        if (!hasBulkMeter) {
+          setAsset(null)
+          setExistingDraftImageUrl(null)
+          setTotalWater('')
+        }
       } catch {
         // keep manual entry
       } finally {
@@ -390,16 +408,18 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       Alert.alert('Validation', 'Please select settlement.')
       return false
     }
-    if (!asset?.uri && !existingDraftImageUrl) {
-      Alert.alert('Validation', 'Evidence image is mandatory. Please attach an image.')
-      return false
-    }
-    if (!isValidNumberInput(totalWater)) {
-      Alert.alert(
-        'Validation',
-        'Total Water Pumped (m³) is required and must be numeric.',
-      )
-      return false
+    if (!noBulkMeterInstalled) {
+      if (!asset?.uri && !existingDraftImageUrl) {
+        Alert.alert('Validation', 'Evidence image is mandatory. Please attach an image.')
+        return false
+      }
+      if (!isValidNumberInput(totalWater)) {
+        Alert.alert(
+          'Validation',
+          'Total Water Pumped (m³) is required and must be numeric.',
+        )
+        return false
+      }
     }
     const tStart = pumpStartTime.trim()
     const tEnd = pumpEndTime.trim()
@@ -436,7 +456,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       Alert.alert('Draft', 'Please choose settlement before saving draft.')
       return
     }
-    if (!asset?.uri && !existingDraftImageUrl) {
+    if (!noBulkMeterInstalled && !asset?.uri && !existingDraftImageUrl) {
       Alert.alert('Draft', 'Please attach an evidence image before saving a draft.')
       return
     }
@@ -448,8 +468,8 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
           id: `water_draft-${Date.now()}`,
           type: 'water_draft',
           payload,
-          evidence: asset,
-          existingImageUrl: existingDraftImageUrl ?? undefined,
+          evidence: noBulkMeterInstalled ? null : asset,
+          existingImageUrl: noBulkMeterInstalled ? undefined : (existingDraftImageUrl ?? undefined),
           createdAt: new Date().toISOString(),
           idempotencyKey: createIdempotencyKey('water_draft'),
         })
@@ -458,7 +478,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
         return
       }
       let imageUrl: string | undefined
-      if (asset) {
+      if (!noBulkMeterInstalled && asset) {
         const up = await uploadEvidenceFile(type, asset)
         const u = up.image_url
         const p = up.path
@@ -471,7 +491,9 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       }
       const res = await saveWaterSupplyDraft(payload, {
         idempotencyKey: createIdempotencyKey('water_draft'),
-        imageUrl: imageUrl ?? (existingDraftImageUrl ?? undefined),
+        imageUrl: noBulkMeterInstalled
+          ? undefined
+          : (imageUrl ?? (existingDraftImageUrl ?? undefined)),
       })
       const firstId = res.record_ids?.[0]
       if (firstId) setActiveDraftId(String(firstId))
@@ -489,15 +511,15 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     id: `${type}-${Date.now()}`,
     type: 'water',
     payload: payload as WaterLogInput,
-    evidence: asset,
-    existingImageUrl: existingDraftImageUrl ?? undefined,
+    evidence: noBulkMeterInstalled ? null : asset,
+    existingImageUrl: noBulkMeterInstalled ? undefined : (existingDraftImageUrl ?? undefined),
     createdAt: new Date().toISOString(),
     idempotencyKey: createIdempotencyKey('water'),
   })
 
   const submitOnline = async (idempotencyKey: string) => {
     let imageUrl: string | undefined
-    if (asset) {
+    if (!noBulkMeterInstalled && asset) {
       const up = await uploadEvidenceFile(type, asset)
       const u = up.image_url
       const p = up.path
@@ -508,7 +530,10 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
             ? p.trim()
             : undefined
     }
-    await saveWaterSupplyData(payload as WaterLogInput, { idempotencyKey, imageUrl })
+    await saveWaterSupplyData(payload as WaterLogInput, {
+      idempotencyKey,
+      imageUrl: noBulkMeterInstalled ? undefined : imageUrl,
+    })
   }
 
   const ensureSignatureBeforeSubmit = async (): Promise<boolean> => {
@@ -668,9 +693,10 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
             <View style={styles.requirementsBox}>
               <Text style={styles.requirementsTitle}>Required for submit</Text>
               <Text style={styles.requirementsBody}>
-                Log date (defaults to today), tehsil & village (and settlement if listed),
-                total water pumped (m³), pump start & end time (server calculates operating
-                hours), and bulk meter photo. Sent as{' '}
+                {noBulkMeterInstalled
+                  ? 'Log date (defaults to today), tehsil & village (and settlement if listed), and pump start & end time. Total water and meter photo are not required when no bulk meter is installed.'
+                  : 'Log date (defaults to today), tehsil & village (and settlement if listed), total water pumped (m³), pump start & end time (server calculates operating hours), and bulk meter photo.'}{' '}
+                Sent as{' '}
                 <Text style={styles.requirementsMono}>monthlyData[]</Text> with{' '}
                 <Text style={styles.requirementsMono}>day</Text> for{' '}
                 <Text style={styles.requirementsMono}>log_date</Text>.
@@ -735,20 +761,30 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
               </>
             )}
 
-            <Text style={[styles.helper, styles.waterMeterHint]}>
-              Enter the monthly total from your water meter reading (m³). Sent as{' '}
-              <Text style={styles.requirementsMono}>total_water_pumped</Text>.
-            </Text>
+            {!noBulkMeterInstalled ? (
+              <>
+                <Text style={[styles.helper, styles.waterMeterHint]}>
+                  Enter the monthly total from your water meter reading (m³). Sent as{' '}
+                  <Text style={styles.requirementsMono}>total_water_pumped</Text>.
+                </Text>
 
-            <View style={styles.field}>
-              <RequiredLabel>Total water pumped (m³)</RequiredLabel>
-              <TextInput
-                value={totalWater}
-                onChangeText={(value) => setTotalWater(sanitizeDecimalInput(value))}
-                keyboardType="decimal-pad"
-                style={styles.input}
-              />
-            </View>
+                <View style={styles.field}>
+                  <RequiredLabel>Total water pumped (m³)</RequiredLabel>
+                  <TextInput
+                    value={totalWater}
+                    onChangeText={(value) => setTotalWater(sanitizeDecimalInput(value))}
+                    keyboardType="decimal-pad"
+                    style={styles.input}
+                  />
+                </View>
+              </>
+            ) : (
+              <View style={styles.facilityBadge}>
+                <Text style={styles.facilityBadgeText}>
+                  No bulk meter installed for this facility. Submit only pump start/end time.
+                </Text>
+              </View>
+            )}
 
             <Text style={styles.subsectionTitle}>Pump run</Text>
             <Text style={[styles.helper, styles.pumpIntro]}>
@@ -786,53 +822,55 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
               </View>
             ) : null}
 
-            <View style={styles.field}>
-              <RequiredLabel>Bulk meter evidence (photo)</RequiredLabel>
-              <Text style={styles.helper}>Upload a photo of the bulk meter.</Text>
-              {asset?.uri ? (
-                <View style={styles.existingPhotoWrap}>
-                  <Image
-                    source={{ uri: asset.uri }}
-                    style={styles.existingPhoto}
-                    resizeMode="cover"
-                  />
-                  <Text style={styles.helper}>New photo selected (will replace saved photo)</Text>
+            {!noBulkMeterInstalled ? (
+              <View style={styles.field}>
+                <RequiredLabel>Bulk meter evidence (photo)</RequiredLabel>
+                <Text style={styles.helper}>Upload a photo of the bulk meter.</Text>
+                {asset?.uri ? (
+                  <View style={styles.existingPhotoWrap}>
+                    <Image
+                      source={{ uri: asset.uri }}
+                      style={styles.existingPhoto}
+                      resizeMode="cover"
+                    />
+                    <Text style={styles.helper}>New photo selected (will replace saved photo)</Text>
+                  </View>
+                ) : existingDraftImageUrl ? (
+                  <View style={styles.existingPhotoWrap}>
+                    <Image
+                      source={{ uri: existingDraftImageUrl }}
+                      style={styles.existingPhoto}
+                      resizeMode="cover"
+                      onError={() => setDraftImageLoadFailed(true)}
+                    />
+                    {draftImageLoadFailed ? (
+                      <Text style={[styles.helper, styles.photoError]}>
+                        Could not load saved photo. Tap Camera/Gallery to replace.
+                      </Text>
+                    ) : (
+                      <Text style={styles.helper}>
+                        Current saved photo (tap Camera/Gallery to replace)
+                      </Text>
+                    )}
+                  </View>
+                ) : null}
+                <View style={styles.row}>
+                  <Pressable style={styles.actionBtn} onPress={openCamera}>
+                    <Text style={styles.actionText}>Camera</Text>
+                  </Pressable>
+                  <Pressable style={styles.actionBtn} onPress={openGallery}>
+                    <Text style={styles.actionText}>Gallery</Text>
+                  </Pressable>
                 </View>
-              ) : existingDraftImageUrl ? (
-                <View style={styles.existingPhotoWrap}>
-                  <Image
-                    source={{ uri: existingDraftImageUrl }}
-                    style={styles.existingPhoto}
-                    resizeMode="cover"
-                    onError={() => setDraftImageLoadFailed(true)}
-                  />
-                  {draftImageLoadFailed ? (
-                    <Text style={[styles.helper, styles.photoError]}>
-                      Could not load saved photo. Tap Camera/Gallery to replace.
-                    </Text>
-                  ) : (
-                    <Text style={styles.helper}>
-                      Current saved photo (tap Camera/Gallery to replace)
-                    </Text>
-                  )}
-                </View>
-              ) : null}
-              <View style={styles.row}>
-                <Pressable style={styles.actionBtn} onPress={openCamera}>
-                  <Text style={styles.actionText}>Camera</Text>
-                </Pressable>
-                <Pressable style={styles.actionBtn} onPress={openGallery}>
-                  <Text style={styles.actionText}>Gallery</Text>
-                </Pressable>
+                <Text style={styles.helper}>
+                  {asset?.fileName || asset?.uri
+                    ? `New: ${asset?.fileName ?? 'image'}`
+                    : existingDraftImageUrl
+                      ? 'Using current saved photo'
+                      : 'No image selected'}
+                </Text>
               </View>
-              <Text style={styles.helper}>
-                {asset?.fileName || asset?.uri
-                  ? `New: ${asset?.fileName ?? 'image'}`
-                  : existingDraftImageUrl
-                    ? 'Using current saved photo'
-                    : 'No image selected'}
-              </Text>
-            </View>
+            ) : null}
 
             <View style={styles.row}>
               <Pressable

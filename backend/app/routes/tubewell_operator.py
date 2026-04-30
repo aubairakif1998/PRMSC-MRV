@@ -639,6 +639,7 @@ def get_water_draft(record_id):
             "tehsil": system.tehsil if system else None,
             "village": system.village if system else None,
             "settlement": system.settlement if system else None,
+            "bulk_meter_installed": system.bulk_meter_installed if system else None,
         }
     )
 
@@ -1012,6 +1013,7 @@ def save_water_supply_data():
                 if not isinstance(month_record, dict):
                     errors.append(f"Row {i+1}: each monthlyData item must be an object")
                     continue
+                no_bulk_meter_installed = getattr(system, "bulk_meter_installed", True) is False
                 month = month_record.get("month")
                 try:
                     pump_hours = _coerce_optional_float(
@@ -1061,6 +1063,17 @@ def save_water_supply_data():
                     errors.append(f"Row {i+1}: invalid log date")
                     raise ValueError("invalid date")
 
+                if no_bulk_meter_installed:
+                    # No-bulk-meter systems are logged by operating interval only.
+                    t_start = month_record.get("pump_start_time")
+                    t_end = month_record.get("pump_end_time")
+                    if not t_start or not t_end:
+                        errors.append(
+                            f"Row {i+1}: pump_start_time and pump_end_time are required when no bulk meter is installed"
+                        )
+                        continue
+                    total_water = None
+
                 existing = WaterEnergyLoggingDaily.query.filter_by(
                     water_system_id=system.id,
                     log_date=log_d,
@@ -1072,6 +1085,8 @@ def save_water_supply_data():
                     existing.signed = status == SUBMISSION_STATUS_SUBMITTED
                     if status == SUBMISSION_STATUS_SUBMITTED:
                         existing.signature_svg_snapshot = _signature_svg_or_none(op_user)
+                    if no_bulk_meter_installed:
+                        existing.bulk_meter_image_url = None
                     apply_pump_time_fields_from_payload(existing, month_record)
                     if (
                         existing.pump_start_time is None or existing.pump_end_time is None
@@ -1084,7 +1099,7 @@ def save_water_supply_data():
                         log_date=log_d,
                         total_water_pumped=total_water,
                         status=status,
-                        bulk_meter_image_url=image_url,
+                        bulk_meter_image_url=None if no_bulk_meter_installed else image_url,
                         signed=status == SUBMISSION_STATUS_SUBMITTED,
                         signature_svg_snapshot=_signature_svg_or_none(op_user)
                         if status == SUBMISSION_STATUS_SUBMITTED
@@ -1100,7 +1115,7 @@ def save_water_supply_data():
                     db.session.flush()
                     saved_record_ids.append(str(new_record.id))
                 
-                if existing and image_url:
+                if existing and image_url and not no_bulk_meter_installed:
                     existing.bulk_meter_image_url = image_url
 
                 # If status is submitted, create a verification submission
