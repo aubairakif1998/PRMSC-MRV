@@ -463,12 +463,7 @@ export default function WaterSystemEditPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>
-                    Pump serial number{" "}
-                    <span className="text-xs font-normal text-muted-foreground">
-                      (Optional)
-                    </span>
-                  </Label>
+                  <Label>Pump serial number </Label>
                   <Input
                     value={formData.pump_serial_number}
                     onChange={onChange("pump_serial_number")}
@@ -630,9 +625,10 @@ export default function WaterSystemEditPage() {
 
                 <div className="grid gap-3 md:grid-cols-[1fr_1.3fr_auto] md:items-end">
                   <div className="space-y-2">
-                  <Label>
-                    Expiry date<RequiredMark />
-                  </Label>
+                    <Label>
+                      Expiry date
+                      <RequiredMark />
+                    </Label>
                     <Input
                       type="date"
                       value={certExpiry}

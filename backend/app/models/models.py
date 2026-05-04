@@ -237,14 +237,16 @@ class WaterSystemCalibrationCertificate(db.Model):
 
 
 class WaterEnergyLoggingDaily(db.Model):
-    """Tubewell operator daily water / pump logs (one row per system per calendar day)."""
+    """Tubewell operator daily water / pump logs (multiple rows/day allowed per time interval)."""
 
     __tablename__ = "water_energy_logging_daily"
     __table_args__ = (
         db.UniqueConstraint(
             "water_system_id",
             "log_date",
-            name="uq_water_energy_logging_daily_sid_date",
+            "pump_start_time",
+            "pump_end_time",
+            name="uq_water_energy_logging_daily_sid_date_times",
         ),
     )
 

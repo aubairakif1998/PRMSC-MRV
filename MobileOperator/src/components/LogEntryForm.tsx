@@ -135,6 +135,13 @@ function isValidTimeOfDayInput(s: string): boolean {
   return /^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(t)
 }
 
+function normalizeTimeKey(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  return normalizeTo24hWithSeconds(trimmed)
+}
+
 export function LogEntryForm({ type, draftId, systemId }: Props) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const resetToHome = () => {
@@ -151,7 +158,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
   const [totalWater, setTotalWater] = useState('')
   const [pumpStartTime, setPumpStartTime] = useState('')
   const [pumpEndTime, setPumpEndTime] = useState('')
-  const [existingRecordId, setExistingRecordId] = useState<string | null>(null)
+  const [dayEntries, setDayEntries] = useState<Array<Record<string, unknown>>>([])
 
   const periodLocked = false
 
@@ -181,6 +188,18 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     if (!village) return []
     return SETTLEMENT_DATA[village] ?? []
   }, [village])
+
+  const duplicateIntervalRecordId = useMemo(() => {
+    const startKey = normalizeTimeKey(pumpStartTime)
+    const endKey = normalizeTimeKey(pumpEndTime)
+    if (!startKey || !endKey) return null
+    const match = dayEntries.find((row) => {
+      const rowStart = normalizeTimeKey(row.pump_start_time)
+      const rowEnd = normalizeTimeKey(row.pump_end_time)
+      return rowStart === startKey && rowEnd === endKey
+    })
+    return match?.id != null ? String(match.id) : null
+  }, [dayEntries, pumpEndTime, pumpStartTime])
 
   const payload = useMemo<WaterLogInput>(() => {
     const parts = parseIsoToYmd(logDateIso)
@@ -319,7 +338,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     }
   }, [draftId, systemId, navigation])
 
-  // One row per system per calendar day: create-only in this screen (no edits).
+  // Fetch existing same-day logs so we can warn on duplicate start/end interval.
   useEffect(() => {
     if (!systemId || draftId) return
     if (!tehsil || !village) return
@@ -336,7 +355,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
           year: parts.y,
         })
         if (cancelled) return
-        const match = rows.find((r) => {
+        const sameDay = rows.filter((r) => {
           if (!r || typeof r !== 'object') return false
           const rr = r as Record<string, unknown>
           const rd = rr.day != null ? Number(rr.day) : 1
@@ -345,20 +364,10 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
             Number(rr.month) === parts.m &&
             rd === parts.d
           )
-        }) as Record<string, unknown> | undefined
-
-        if (match?.id) {
-          setExistingRecordId(String(match.id))
-        } else {
-          setExistingRecordId(null)
-          if (!draftId && systemId) {
-            setTotalWater('')
-            setPumpStartTime('')
-            setPumpEndTime('')
-          }
-        }
+        }) as Array<Record<string, unknown>>
+        setDayEntries(sameDay)
       } catch {
-        setExistingRecordId(null)
+        setDayEntries([])
       }
     })()
 
@@ -385,13 +394,6 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       Alert.alert(
         'Validation',
         'Choose a valid log date (today or an earlier day).',
-      )
-      return false
-    }
-    if (existingRecordId) {
-      Alert.alert(
-        'Already logged',
-        'A log already exists for this facility and date. Please select a different date.',
       )
       return false
     }
@@ -432,6 +434,13 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     }
     if (!isValidTimeOfDayInput(tStart) || !isValidTimeOfDayInput(tEnd)) {
       Alert.alert('Validation', 'Pump start and end times are invalid. Pick both again.')
+      return false
+    }
+    if (duplicateIntervalRecordId) {
+      Alert.alert(
+        'Duplicate interval',
+        'A log for this facility/date with the same pump start and end time already exists. Please choose a different time range.',
+      )
       return false
     }
     return true
@@ -813,11 +822,11 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
               />
             </View>
 
-            {existingRecordId ? (
+            {duplicateIntervalRecordId ? (
               <View style={styles.facilityBadge}>
                 <Text style={styles.facilityBadgeText}>
-                  A log already exists for this facility and date. Pick another date to create a
-                  new log.
+                  Duplicate interval found for this date. Change pump start/end time before
+                  submitting.
                 </Text>
               </View>
             ) : null}

@@ -39,7 +39,11 @@ from app.utils.operator_helpers import (
 )
 from app.utils.workflow_helpers import log_verification_action, notify_analysts
 from app.services import UserService, StorageService
-from app.utils.pump_times import apply_pump_time_fields_from_payload, time_to_json
+from app.utils.pump_times import (
+    apply_pump_time_fields_from_payload,
+    parse_time_of_day,
+    time_to_json,
+)
 from app.services.tehsil_access import (
     TehsilAccessDenied,
     assert_user_may_access_tehsil,
@@ -698,6 +702,25 @@ def update_water_draft(record_id):
         except (TypeError, ValueError):
             return jsonify({"error": "Invalid year, month, or day"}), 400
 
+    # Reject duplicate interval for same system and day.
+    if record.pump_start_time is not None and record.pump_end_time is not None:
+        conflict = (
+            WaterEnergyLoggingDaily.query.filter(
+                WaterEnergyLoggingDaily.id != record.id,
+                WaterEnergyLoggingDaily.water_system_id == record.water_system_id,
+                WaterEnergyLoggingDaily.log_date == record.log_date,
+                WaterEnergyLoggingDaily.pump_start_time == record.pump_start_time,
+                WaterEnergyLoggingDaily.pump_end_time == record.pump_end_time,
+            ).first()
+        )
+        if conflict:
+            return jsonify(
+                {
+                    "error": "Duplicate interval",
+                    "message": "A log already exists for this day with the same pump start/end time.",
+                }
+            ), 400
+
     db.session.commit()
 
     return jsonify({"message": "Draft updated successfully", "id": str(record.id)})
@@ -1063,64 +1086,57 @@ def save_water_supply_data():
                     errors.append(f"Row {i+1}: invalid log date")
                     raise ValueError("invalid date")
 
+                start_raw = month_record.get("pump_start_time")
+                end_raw = month_record.get("pump_end_time")
+                start_time = parse_time_of_day(start_raw)
+                end_time = parse_time_of_day(end_raw)
+                if start_time is None or end_time is None:
+                    errors.append(
+                        f"Row {i+1}: pump_start_time and pump_end_time are required and must be valid times"
+                    )
+                    continue
+
                 if no_bulk_meter_installed:
                     # No-bulk-meter systems are logged by operating interval only.
-                    t_start = month_record.get("pump_start_time")
-                    t_end = month_record.get("pump_end_time")
-                    if not t_start or not t_end:
-                        errors.append(
-                            f"Row {i+1}: pump_start_time and pump_end_time are required when no bulk meter is installed"
-                        )
-                        continue
                     total_water = None
 
-                existing = WaterEnergyLoggingDaily.query.filter_by(
+                # Allow multiple logs/day, but reject duplicate interval.
+                duplicate_interval = WaterEnergyLoggingDaily.query.filter_by(
                     water_system_id=system.id,
                     log_date=log_d,
+                    pump_start_time=start_time,
+                    pump_end_time=end_time,
                 ).first()
-
-                if existing:
-                    existing.total_water_pumped = total_water
-                    existing.status = status
-                    existing.signed = status == SUBMISSION_STATUS_SUBMITTED
-                    if status == SUBMISSION_STATUS_SUBMITTED:
-                        existing.signature_svg_snapshot = _signature_svg_or_none(op_user)
-                    if no_bulk_meter_installed:
-                        existing.bulk_meter_image_url = None
-                    apply_pump_time_fields_from_payload(existing, month_record)
-                    if (
-                        existing.pump_start_time is None or existing.pump_end_time is None
-                    ) and pump_hours is not None:
-                        existing.pump_operating_hours = pump_hours
-                    saved_record_ids.append(str(existing.id))
-                else:
-                    new_record = WaterEnergyLoggingDaily(
-                        water_system_id=system.id,
-                        log_date=log_d,
-                        total_water_pumped=total_water,
-                        status=status,
-                        bulk_meter_image_url=None if no_bulk_meter_installed else image_url,
-                        signed=status == SUBMISSION_STATUS_SUBMITTED,
-                        signature_svg_snapshot=_signature_svg_or_none(op_user)
-                        if status == SUBMISSION_STATUS_SUBMITTED
-                        else None,
+                if duplicate_interval:
+                    errors.append(
+                        f"Row {i+1}: duplicate log interval for this system/day (same pump_start_time and pump_end_time)"
                     )
-                    apply_pump_time_fields_from_payload(new_record, month_record)
-                    if (
-                        new_record.pump_start_time is None
-                        or new_record.pump_end_time is None
-                    ) and pump_hours is not None:
-                        new_record.pump_operating_hours = pump_hours
-                    db.session.add(new_record)
-                    db.session.flush()
-                    saved_record_ids.append(str(new_record.id))
-                
-                if existing and image_url and not no_bulk_meter_installed:
-                    existing.bulk_meter_image_url = image_url
+                    continue
+
+                new_record = WaterEnergyLoggingDaily(
+                    water_system_id=system.id,
+                    log_date=log_d,
+                    total_water_pumped=total_water,
+                    status=status,
+                    bulk_meter_image_url=None if no_bulk_meter_installed else image_url,
+                    signed=status == SUBMISSION_STATUS_SUBMITTED,
+                    signature_svg_snapshot=_signature_svg_or_none(op_user)
+                    if status == SUBMISSION_STATUS_SUBMITTED
+                    else None,
+                )
+                apply_pump_time_fields_from_payload(new_record, month_record)
+                if (
+                    new_record.pump_start_time is None
+                    or new_record.pump_end_time is None
+                ) and pump_hours is not None:
+                    new_record.pump_operating_hours = pump_hours
+                db.session.add(new_record)
+                db.session.flush()
+                saved_record_ids.append(str(new_record.id))
 
                 # If status is submitted, create a verification submission
                 if status == SUBMISSION_STATUS_SUBMITTED:
-                    rec = existing if existing else new_record
+                    rec = new_record
                     record_id_to_link = str(rec.id)
                     existing_sub = Submission.query.filter_by(record_id=record_id_to_link).first()
                     
