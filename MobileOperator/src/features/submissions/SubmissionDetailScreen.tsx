@@ -42,6 +42,7 @@ import {
   AmPmTimePickerField,
   normalizeTo24hWithSeconds,
 } from '../../components/AmPmTimePickerField';
+import { formatPakistanDateTimeMedium } from '../../utils/pakistanTime';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SubmissionDetail'>;
 
@@ -55,16 +56,6 @@ function fmt(v: unknown): string {
     return String(v);
   }
   return JSON.stringify(v);
-}
-
-function fmtDate(iso: unknown): string {
-  if (iso == null || iso === '') return '—';
-  const d = new Date(String(iso));
-  if (Number.isNaN(d.getTime())) return String(iso);
-  return d.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
 }
 
 function formatSubmissionType(raw: unknown): string {
@@ -521,10 +512,10 @@ export function SubmissionDetailScreen({ route }: Props) {
         <Separator />
         <CardContent className="gap-4 pt-4">
           <DetailRow label="Remarks" value={fmt(sub.remarks)} />
-          <DetailRow label="Submitted at" value={fmtDate(sub.submitted_at)} />
-          <DetailRow label="Reviewed at" value={fmtDate(sub.reviewed_at)} />
+          <DetailRow label="Submitted at" value={formatPakistanDateTimeMedium(sub.submitted_at)} />
+          <DetailRow label="Reviewed at" value={formatPakistanDateTimeMedium(sub.reviewed_at)} />
           <DetailRow label="Reviewed by" value={fmt(sub.reviewed_by_name)} />
-          <DetailRow label="Approved at" value={fmtDate(sub.approved_at)} />
+          <DetailRow label="Approved at" value={formatPakistanDateTimeMedium(sub.approved_at)} />
           <DetailRow label="Approved by" value={fmt(sub.approved_by_name)} />
         </CardContent>
       </Card>
@@ -588,7 +579,7 @@ export function SubmissionDetailScreen({ route }: Props) {
                     {fmt(entry.action_type)}
                   </Text>
                   <Text className="text-xs text-muted-foreground">
-                    {fmtDate(entry.timestamp)}
+                    {formatPakistanDateTimeMedium(entry.timestamp)}
                   </Text>
                 </View>
                 <Text className="text-xs text-muted-foreground">

@@ -1,5 +1,6 @@
 import { STORAGE_KEYS } from '../storage/keys';
 import { getJson, setJson } from '../storage/jsonStorage';
+import { nowIsoTimestamp } from '../utils/pakistanTime';
 
 type SignatureCache = {
   hasSignature: boolean;
@@ -13,7 +14,7 @@ export async function getSignatureCache(): Promise<SignatureCache | null> {
 export async function setSignatureCache(hasSignature: boolean): Promise<void> {
   await setJson<SignatureCache>(STORAGE_KEYS.signature, {
     hasSignature,
-    checkedAt: new Date().toISOString(),
+    checkedAt: nowIsoTimestamp(),
   });
 }
 

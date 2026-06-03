@@ -8,6 +8,7 @@
  * - `GET /operator/water-systems` assigned systems.
  * - `GET /operator/my-submissions` and `GET /operator/tubewell/submission/<id>`.
  */
+import { getPakistanDay, getPakistanMonth, getPakistanYear } from '../utils/pakistanTime';
 import { apiClient } from './client';
 import type { AnyRecord } from './types';
 import type { EvidenceAsset, WaterLogInput } from '../types/operator';
@@ -38,7 +39,6 @@ function buildWaterSupplyBody(
   opts: { status?: 'draft' | 'submitted'; imageUrl?: string },
 ): AnyRecord {
   const status = opts.status ?? 'submitted';
-  const now = new Date();
   const tw =
     input.totalWaterPumping != null &&
     Number.isFinite(Number(input.totalWaterPumping))
@@ -51,8 +51,8 @@ function buildWaterSupplyBody(
     input.pumpEndTime.trim();
 
   const monthRow: AnyRecord = {
-    month: safeInt(input.month, now.getMonth() + 1),
-    day: safeInt(input.day, now.getDate()),
+    month: safeInt(input.month, getPakistanMonth()),
+    day: safeInt(input.day, getPakistanDay()),
     total_water_pumped: tw,
   };
   if (hasTimes) {
@@ -69,7 +69,7 @@ function buildWaterSupplyBody(
         monthlyData: [monthRow],
       },
     ],
-    year: safeInt(input.year, now.getFullYear()),
+    year: safeInt(input.year, getPakistanYear()),
     status,
   };
   if (opts.imageUrl) {
@@ -253,9 +253,9 @@ export async function updateWaterDraftById(
   input: WaterLogInput,
 ) {
   const body: AnyRecord = {
-    year: safeInt(input.year, new Date().getFullYear()),
-    month: safeInt(input.month, new Date().getMonth() + 1),
-    day: safeInt(input.day, new Date().getDate()),
+    year: safeInt(input.year, getPakistanYear()),
+    month: safeInt(input.month, getPakistanMonth()),
+    day: safeInt(input.day, getPakistanDay()),
     total_water_pumped:
       input.totalWaterPumping != null &&
       Number.isFinite(Number(input.totalWaterPumping))

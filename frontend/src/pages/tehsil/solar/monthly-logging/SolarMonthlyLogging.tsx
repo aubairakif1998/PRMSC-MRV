@@ -47,6 +47,7 @@ import { tehsilRoutes } from "../../../../constants/routes";
 import { useSolarMonthlyLogs, useTehsilManagerOperatorApi } from "../../../../hooks";
 import { getApiErrorMessage } from "../../../../lib/api-error";
 import type { SolarMonthlyLogTableRow } from "../../../../types/api";
+import { formatPakistanDateTime, getPakistanYear } from "../../../../utils/pakistanTime";
 
 const MONTH_NAMES = [
   "",
@@ -64,19 +65,6 @@ const MONTH_NAMES = [
   "December",
 ];
 
-function formatDateTime(value?: string | null) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function formatNum(v: unknown) {
   if (v === null || v === undefined || v === "") return "—";
   const n = Number(v);
@@ -84,7 +72,7 @@ function formatNum(v: unknown) {
   return n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
 }
 
-const currentYear = new Date().getFullYear();
+const currentYear = getPakistanYear();
 const YEAR_OPTIONS = Array.from({ length: 8 }, (_, i) => currentYear - 5 + i);
 
 export default function SolarMonthlyLogging() {
@@ -263,12 +251,13 @@ export default function SolarMonthlyLogging() {
                         <TableHead>Settlement</TableHead>
                         <TableHead>Year</TableHead>
                         <TableHead>Month</TableHead>
-                        <TableHead className="text-right">Import off-peak</TableHead>
-                        <TableHead className="text-right">Import peak</TableHead>
-                        <TableHead className="text-right">Export off-peak</TableHead>
-                        <TableHead className="text-right">Export peak</TableHead>
-                        <TableHead className="text-right">Net off-peak</TableHead>
-                        <TableHead className="text-right">Net peak</TableHead>
+                        <TableHead>Mode</TableHead>
+                        <TableHead className="text-right">Import off-peak (kWh)</TableHead>
+                        <TableHead className="text-right">Import peak (kWh)</TableHead>
+                        <TableHead className="text-right">Export off-peak (kWh)</TableHead>
+                        <TableHead className="text-right">Export peak (kWh)</TableHead>
+                        <TableHead className="text-right">Net off-peak (kWh)</TableHead>
+                        <TableHead className="text-right">Net peak (kWh)</TableHead>
                         <TableHead className="min-w-[140px]">Remarks</TableHead>
                         <TableHead>Bill</TableHead>
                         <TableHead>Created</TableHead>
@@ -282,7 +271,7 @@ export default function SolarMonthlyLogging() {
                       {filtered.length === 0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={16}
+                            colSpan={17}
                             className="h-28 text-center text-muted-foreground"
                           >
                             No monthly logs for {year}. Use{" "}
@@ -306,23 +295,44 @@ export default function SolarMonthlyLogging() {
                             <TableCell>
                               {MONTH_NAMES[r.month] ?? r.month}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {formatNum(r.import_off_peak)}
+                            <TableCell>
+                              {r.tou_required === false
+                                ? "Total readings"
+                                : "Peak & off-peak"}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {formatNum(r.import_peak)}
+                              {formatNum(
+                                r.tou_required === false
+                                  ? (r.import_total ?? r.import_off_peak)
+                                  : r.import_off_peak,
+                              )}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {formatNum(r.export_off_peak)}
+                              {formatNum(
+                                r.tou_required === false ? null : r.import_peak,
+                              )}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {formatNum(r.export_peak)}
+                              {formatNum(
+                                r.tou_required === false
+                                  ? (r.export_total ?? r.export_off_peak)
+                                  : r.export_off_peak,
+                              )}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {formatNum(r.net_off_peak)}
+                              {formatNum(
+                                r.tou_required === false ? null : r.export_peak,
+                              )}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {formatNum(r.net_peak)}
+                              {formatNum(
+                                r.tou_required === false
+                                  ? (r.net_total ?? r.net_off_peak)
+                                  : r.net_off_peak,
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatNum(r.tou_required === false ? null : r.net_peak)}
                             </TableCell>
                             <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground" title={r.remarks ?? ""}>
                               {r.remarks?.trim() ? r.remarks : "—"}
@@ -343,10 +353,10 @@ export default function SolarMonthlyLogging() {
                               )}
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                              {formatDateTime(r.created_at)}
+                              {formatPakistanDateTime(r.created_at)}
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                              {formatDateTime(r.updated_at)}
+                              {formatPakistanDateTime(r.updated_at)}
                             </TableCell>
                             <TableCell className="sticky right-0 z-10 min-w-[180px] bg-card text-right shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.12)]">
                               <div className="inline-flex flex-wrap justify-end gap-2">

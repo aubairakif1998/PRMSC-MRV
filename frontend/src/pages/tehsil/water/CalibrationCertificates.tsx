@@ -34,6 +34,11 @@ import {
 import { tehsilRoutes } from "../../../constants/routes";
 import { getApiErrorMessage } from "../../../lib/api-error";
 import { getActiveWaterSystemCalibrationCertificates } from "../../../services/tehsilManagerOperatorService";
+import {
+  formatPakistanDate,
+  getPakistanIsoDateString,
+  pakistanCalendarDayDiff,
+} from "../../../utils/pakistanTime";
 
 type ActiveCertRow = {
   water_system: {
@@ -62,19 +67,9 @@ const fileNameFromUrl = (url: string) => {
   }
 };
 
-const fmtDate = (value?: string | null) => {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString("en-GB");
-};
+const fmtDate = formatPakistanDate;
 
 type ExpiryState = "expired" | "expiring_7d" | "valid" | "unknown";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-const startOfDay = (d: Date) =>
-  new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 const getExpiryMeta = (
   value?: string | null,
@@ -87,11 +82,11 @@ const getExpiryMeta = (
   if (Number.isNaN(parsed.getTime()))
     return { state: "unknown", daysRemaining: null };
 
-  const today = startOfDay(new Date());
-  const expiry = startOfDay(parsed);
-  const daysRemaining = Math.floor(
-    (expiry.getTime() - today.getTime()) / DAY_MS,
-  );
+  const expiryIso =
+    /^\d{4}-\d{2}-\d{2}/.test(value.trim())
+      ? value.trim().slice(0, 10)
+      : getPakistanIsoDateString(parsed);
+  const daysRemaining = pakistanCalendarDayDiff(expiryIso);
 
   if (daysRemaining < 0) return { state: "expired", daysRemaining };
   if (daysRemaining <= 7) return { state: "expiring_7d", daysRemaining };

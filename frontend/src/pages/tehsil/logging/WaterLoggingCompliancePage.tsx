@@ -16,21 +16,16 @@ import type {
 import { downloadWaterComplianceExcel } from "./exportComplianceExcel";
 import WaterLoggingComplianceSection from "./WaterLoggingComplianceSection";
 import { chunkDaysByWeek } from "./waterDailyChunks";
+import {
+  getPakistanIsoDateString,
+  subtractPakistanDays,
+} from "../../../utils/pakistanTime";
 
-function isoDateLocal(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-/** Last N calendar days ending today (inclusive). */
+/** Last N calendar days ending today (inclusive), in Pakistan time. */
 function rangeForLastNDays(n: number): { date_from: string; date_to: string } {
-  const end = new Date();
-  end.setHours(0, 0, 0, 0);
-  const start = new Date(end);
-  start.setDate(start.getDate() - (n - 1));
-  return { date_from: isoDateLocal(start), date_to: isoDateLocal(end) };
+  const date_to = getPakistanIsoDateString();
+  const date_from = subtractPakistanDays(date_to, n - 1);
+  return { date_from, date_to };
 }
 
 export default function WaterLoggingCompliancePage() {

@@ -36,6 +36,7 @@ import { useAuth } from "../../../contexts/AuthContext";
 import { TEHSIL_OPTIONS, LOCATION_DATA } from "../../../utils/locationData";
 import { useTehsilProgramSummary } from "../../../hooks";
 import { getApiErrorMessage } from "../../../lib/api-error";
+import { getPakistanYear } from "../../../utils/pakistanTime";
 
 type Filters = {
   tehsil: string;
@@ -56,7 +57,7 @@ const TehsilManagerDashboard = () => {
     return t.length > 0 ? t : [...TEHSIL_OPTIONS];
   }, [user?.tehsils]);
 
-  const currentYear = new Date().getFullYear();
+  const currentYear = getPakistanYear();
   const defaultTehsil = useMemo((): string => {
     if (scopedTehsils.length === 1) {
       const only = scopedTehsils[0];

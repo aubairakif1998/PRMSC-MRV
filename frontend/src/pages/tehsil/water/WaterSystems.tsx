@@ -26,17 +26,7 @@ import { useTehsilManagerOperatorApi } from "../../../hooks";
 import { tehsilRoutes } from "../../../constants/routes";
 import { getApiErrorMessage } from "../../../lib/api-error";
 import type { WaterSystemRow } from "../../../types/api";
-
-function formatDate(value?: string | null) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
+import { formatPakistanDateTime } from "../../../utils/pakistanTime";
 
 const kv = (v: unknown) => {
   if (v === null || v === undefined || v === "") return "—";
@@ -204,8 +194,8 @@ export default function WaterSystems() {
                             </Badge>
                           </TableCell>
                           <TableCell>{kv(s.pump_model)}</TableCell>
-                          <TableCell>{formatDate(s.created_at)}</TableCell>
-                          <TableCell>{formatDate(s.updated_at)}</TableCell>
+                          <TableCell>{formatPakistanDateTime(s.created_at)}</TableCell>
+                          <TableCell>{formatPakistanDateTime(s.updated_at)}</TableCell>
                           <TableCell className="text-right">
                             <div className="inline-flex items-center gap-2">
                               <Button

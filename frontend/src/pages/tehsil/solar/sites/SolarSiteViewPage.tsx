@@ -17,21 +17,11 @@ import { getApiErrorMessage } from "../../../../lib/api-error";
 import { getSolarSystem } from "../../../../services/tehsilManagerOperatorService";
 import type { SolarSystemRow } from "../../../../types/api";
 import Toast from "../../../../components/Toast";
+import { formatPakistanDateTime } from "../../../../utils/pakistanTime";
 
 function kv(v: unknown) {
   if (v === null || v === undefined || v === "") return "—";
   return String(v);
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 export default function SolarSiteViewPage() {
@@ -128,11 +118,11 @@ export default function SolarSiteViewPage() {
                   </div>
                   <div className="flex items-center justify-between rounded-md border bg-slate-50/60 px-3 py-2">
                     <span className="text-muted-foreground">Created</span>
-                    <span>{formatDate(site.created_at)}</span>
+                    <span>{formatPakistanDateTime(site.created_at)}</span>
                   </div>
                   <div className="flex items-center justify-between rounded-md border bg-slate-50/60 px-3 py-2">
                     <span className="text-muted-foreground">Updated</span>
-                    <span>{formatDate(site.updated_at)}</span>
+                    <span>{formatPakistanDateTime(site.updated_at)}</span>
                   </div>
                 </CardContent>
               </Card>

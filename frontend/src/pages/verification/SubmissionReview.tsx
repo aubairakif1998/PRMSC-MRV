@@ -50,6 +50,7 @@ import {
 } from "../../components/ui/tabs";
 import { toast } from "sonner";
 import { getApiOrigin } from "../../utils/apiOrigin";
+import { formatPakistanDateTime } from "../../utils/pakistanTime";
 
 const STATUS_CONFIG = {
   draft: {
@@ -144,16 +145,7 @@ const infoValue = (value: unknown, suffix = "") => {
   return `${String(value)}${suffix}`;
 };
 
-const formatDate = (dateStr?: string) => {
-  if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+const formatDate = (dateStr?: string) => formatPakistanDateTime(dateStr, "-");
 
 const getImageUrl = (path?: string) => {
   if (!path) return "";

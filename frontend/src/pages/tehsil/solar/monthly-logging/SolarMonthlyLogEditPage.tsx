@@ -112,6 +112,10 @@ export default function SolarMonthlyLogEditPage() {
   const [importPeak, setImportPeak] = useState("");
   const [netOffPeak, setNetOffPeak] = useState("");
   const [netPeak, setNetPeak] = useState("");
+  const [exportTotal, setExportTotal] = useState("");
+  const [importTotal, setImportTotal] = useState("");
+  const [netTotal, setNetTotal] = useState("");
+  const [touRequired, setTouRequired] = useState<"yes" | "no">("yes");
   const [remarks, setRemarks] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
@@ -166,6 +170,13 @@ export default function SolarMonthlyLogEditPage() {
         }
 
         setRecord(rec);
+        const requiresTou =
+          rec.tou_required != null
+            ? Boolean(rec.tou_required)
+            : [rec.export_peak, rec.import_peak, rec.net_peak].some(
+                (v) => v != null && String(v).trim() !== "",
+              );
+        setTouRequired(requiresTou ? "yes" : "no");
         setExportOffPeak(
           rec.export_off_peak != null && String(rec.export_off_peak) !== ""
             ? String(rec.export_off_peak)
@@ -196,6 +207,27 @@ export default function SolarMonthlyLogEditPage() {
             ? String(rec.net_peak)
             : "",
         );
+        setExportTotal(
+          rec.export_total != null && String(rec.export_total) !== ""
+            ? String(rec.export_total)
+            : rec.export_off_peak != null && String(rec.export_off_peak) !== ""
+              ? String(rec.export_off_peak)
+              : "",
+        );
+        setImportTotal(
+          rec.import_total != null && String(rec.import_total) !== ""
+            ? String(rec.import_total)
+            : rec.import_off_peak != null && String(rec.import_off_peak) !== ""
+              ? String(rec.import_off_peak)
+              : "",
+        );
+        setNetTotal(
+          rec.net_total != null && String(rec.net_total) !== ""
+            ? String(rec.net_total)
+            : rec.net_off_peak != null && String(rec.net_off_peak) !== ""
+              ? String(rec.net_off_peak)
+              : "",
+        );
         setRemarks(rec.remarks?.trim() ? String(rec.remarks) : "");
         setAttachment(null);
       } catch (e: unknown) {
@@ -222,20 +254,31 @@ export default function SolarMonthlyLogEditPage() {
 
   const save = async () => {
     if (!recordId || !record) return;
-    const values = [
-      exportOffPeak,
-      exportPeak,
-      importOffPeak,
-      importPeak,
-      netOffPeak,
-      netPeak,
-    ];
-    const nums = values.map((v) => parseFloat(v));
-    if (values.some((v) => v.trim() === "") || nums.some((n) => Number.isNaN(n))) {
-      toast.error(
-        "Enter Import/Export/Net values (Peak & Off-Peak) in kWh (numbers; 0 is allowed).",
-      );
-      return;
+    if (touRequired === "yes") {
+      const values = [
+        exportOffPeak,
+        exportPeak,
+        importOffPeak,
+        importPeak,
+        netOffPeak,
+        netPeak,
+      ];
+      const nums = values.map((v) => parseFloat(v));
+      if (values.some((v) => v.trim() === "") || nums.some((n) => Number.isNaN(n))) {
+        toast.error(
+          "Enter Import/Export/Net values (Peak & Off-Peak) in kWh (numbers; 0 is allowed).",
+        );
+        return;
+      }
+    } else {
+      const values = [exportTotal, importTotal, netTotal];
+      const nums = values.map((v) => parseFloat(v));
+      if (values.some((v) => v.trim() === "") || nums.some((n) => Number.isNaN(n))) {
+        toast.error(
+          "Enter Import, Export, and Net values in kWh (numbers; 0 is allowed).",
+        );
+        return;
+      }
     }
 
     setSaving(true);
@@ -248,12 +291,16 @@ export default function SolarMonthlyLogEditPage() {
       }
 
       const payload: Record<string, unknown> = {
-        export_off_peak: exportOffPeak,
-        export_peak: exportPeak,
-        import_off_peak: importOffPeak,
-        import_peak: importPeak,
-        net_off_peak: netOffPeak,
-        net_peak: netPeak,
+        tou_required: touRequired === "yes",
+        export_off_peak: touRequired === "yes" ? exportOffPeak : null,
+        export_peak: touRequired === "yes" ? exportPeak : null,
+        import_off_peak: touRequired === "yes" ? importOffPeak : null,
+        import_peak: touRequired === "yes" ? importPeak : null,
+        net_off_peak: touRequired === "yes" ? netOffPeak : null,
+        net_peak: touRequired === "yes" ? netPeak : null,
+        export_total: touRequired === "no" ? exportTotal : null,
+        import_total: touRequired === "no" ? importTotal : null,
+        net_total: touRequired === "no" ? netTotal : null,
         remarks: remarks.trim() || null,
       };
       if (imagePath) {
@@ -269,12 +316,27 @@ export default function SolarMonthlyLogEditPage() {
         if (!prev) return prev;
         const next: SolarMonthlySupplyRecordDetail = {
           ...prev,
-          export_off_peak: nums[0]!,
-          export_peak: nums[1]!,
-          import_off_peak: nums[2]!,
-          import_peak: nums[3]!,
-          net_off_peak: nums[4]!,
-          net_peak: nums[5]!,
+          tou_required: touRequired === "yes",
+          export_off_peak:
+            touRequired === "yes"
+              ? Number.parseFloat(exportOffPeak)
+              : Number.parseFloat(exportTotal),
+          export_peak:
+            touRequired === "yes" ? Number.parseFloat(exportPeak) : null,
+          import_off_peak:
+            touRequired === "yes"
+              ? Number.parseFloat(importOffPeak)
+              : Number.parseFloat(importTotal),
+          import_peak:
+            touRequired === "yes" ? Number.parseFloat(importPeak) : null,
+          net_off_peak:
+            touRequired === "yes"
+              ? Number.parseFloat(netOffPeak)
+              : Number.parseFloat(netTotal),
+          net_peak: touRequired === "yes" ? Number.parseFloat(netPeak) : null,
+          export_total: Number.parseFloat(exportTotal || exportOffPeak || "0"),
+          import_total: Number.parseFloat(importTotal || importOffPeak || "0"),
+          net_total: Number.parseFloat(netTotal || netOffPeak || "0"),
           remarks: remarks.trim() ? remarks.trim() : null,
           electricity_bill_image_url: imagePath
             ? imagePath
@@ -388,90 +450,172 @@ export default function SolarMonthlyLogEditPage() {
           <CardHeader className="border-b border-border/60 bg-card">
             <CardTitle>Energy & evidence</CardTitle>
             <CardDescription>
-              Update peak/off-peak import/export/net (kWh) and optional bill image
-              for this month.
+              Update either peak/off-peak readings or total import/export/net
+              values (kWh), plus optional bill image for this month.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 pt-6">
+            <div className="rounded-xl border border-border/70 bg-card p-4">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <Label className="text-sm font-semibold">
+                    Does this bill include separate peak/off-peak readings?
+                  </Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Choose <span className="font-semibold">Yes</span> when the
+                    bill has separate peak and off-peak values. Choose{" "}
+                    <span className="font-semibold">No</span> to log only total
+                    import/export/net.
+                  </p>
+                </div>
+                <div className="inline-flex w-fit overflow-hidden rounded-lg border">
+                  <Button
+                    type="button"
+                    variant={touRequired === "yes" ? "default" : "ghost"}
+                    className="rounded-none px-5"
+                    onClick={() => setTouRequired("yes")}
+                    disabled={saving}
+                  >
+                    Yes
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={touRequired === "no" ? "default" : "ghost"}
+                    className="rounded-none px-5"
+                    onClick={() => setTouRequired("no")}
+                    disabled={saving}
+                  >
+                    No
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="export-off-peak">Export off-peak (kWh)</Label>
-                <Input
-                  id="export-off-peak"
-                  type="number"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={exportOffPeak}
-                  onChange={(e) => setExportOffPeak(e.target.value)}
-                  placeholder="0"
-                  disabled={saving}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="export-peak">Export peak (kWh)</Label>
-                <Input
-                  id="export-peak"
-                  type="number"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={exportPeak}
-                  onChange={(e) => setExportPeak(e.target.value)}
-                  placeholder="0"
-                  disabled={saving}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="import-off-peak">Import off-peak (kWh)</Label>
-                <Input
-                  id="import-off-peak"
-                  type="number"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={importOffPeak}
-                  onChange={(e) => setImportOffPeak(e.target.value)}
-                  placeholder="0"
-                  disabled={saving}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="import-peak">Import peak (kWh)</Label>
-                <Input
-                  id="import-peak"
-                  type="number"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={importPeak}
-                  onChange={(e) => setImportPeak(e.target.value)}
-                  placeholder="0"
-                  disabled={saving}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="net-off-peak">Net off-peak (kWh)</Label>
-                <Input
-                  id="net-off-peak"
-                  type="number"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={netOffPeak}
-                  onChange={(e) => setNetOffPeak(e.target.value)}
-                  placeholder="0"
-                  disabled={saving}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="net-peak">Net peak (kWh)</Label>
-                <Input
-                  id="net-peak"
-                  type="number"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={netPeak}
-                  onChange={(e) => setNetPeak(e.target.value)}
-                  placeholder="0"
-                  disabled={saving}
-                />
-              </div>
+              {touRequired === "yes" ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="export-off-peak">Export off-peak (kWh)</Label>
+                    <Input
+                      id="export-off-peak"
+                      type="number"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={exportOffPeak}
+                      onChange={(e) => setExportOffPeak(e.target.value)}
+                      placeholder="0"
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="export-peak">Export peak (kWh)</Label>
+                    <Input
+                      id="export-peak"
+                      type="number"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={exportPeak}
+                      onChange={(e) => setExportPeak(e.target.value)}
+                      placeholder="0"
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="import-off-peak">Import off-peak (kWh)</Label>
+                    <Input
+                      id="import-off-peak"
+                      type="number"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={importOffPeak}
+                      onChange={(e) => setImportOffPeak(e.target.value)}
+                      placeholder="0"
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="import-peak">Import peak (kWh)</Label>
+                    <Input
+                      id="import-peak"
+                      type="number"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={importPeak}
+                      onChange={(e) => setImportPeak(e.target.value)}
+                      placeholder="0"
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="net-off-peak">Net off-peak (kWh)</Label>
+                    <Input
+                      id="net-off-peak"
+                      type="number"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={netOffPeak}
+                      onChange={(e) => setNetOffPeak(e.target.value)}
+                      placeholder="0"
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="net-peak">Net peak (kWh)</Label>
+                    <Input
+                      id="net-peak"
+                      type="number"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={netPeak}
+                      onChange={(e) => setNetPeak(e.target.value)}
+                      placeholder="0"
+                      disabled={saving}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="export-total">Export (kWh)</Label>
+                    <Input
+                      id="export-total"
+                      type="number"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={exportTotal}
+                      onChange={(e) => setExportTotal(e.target.value)}
+                      placeholder="0"
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="import-total">Import (kWh)</Label>
+                    <Input
+                      id="import-total"
+                      type="number"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={importTotal}
+                      onChange={(e) => setImportTotal(e.target.value)}
+                      placeholder="0"
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="net-total">Net (kWh)</Label>
+                    <Input
+                      id="net-total"
+                      type="number"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={netTotal}
+                      onChange={(e) => setNetTotal(e.target.value)}
+                      placeholder="0"
+                      disabled={saving}
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="space-y-2">

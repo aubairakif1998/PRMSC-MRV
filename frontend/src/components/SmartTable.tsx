@@ -8,6 +8,7 @@ import {
   type ColumnDef as TanstackColumnDef,
 } from '@tanstack/react-table'
 import { AlertCircle, ChevronDown, ChevronUp, Copy, Plus, Search, Trash2 } from 'lucide-react'
+import { getPakistanYear } from '../utils/pakistanTime'
 
 type SmartColumnType = 'text' | 'number' | 'dropdown' | 'image'
 
@@ -223,7 +224,7 @@ const RowNumberCell = ({ row }: { row: { index: number } }) => (
 const SmartTable = ({
   columns: columnDefs,
   initialRows = [],
-  year = new Date().getFullYear(),
+  year = getPakistanYear(),
   onSaveDraft,
   onSubmit,
   loading = false,

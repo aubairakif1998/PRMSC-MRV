@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { formatPakistanDateTimeMedium, getPakistanDayStartMs } from '../../utils/pakistanTime';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -61,14 +62,7 @@ function formatSubmissionType(raw: unknown): string {
 }
 
 function formatWhen(raw: unknown): string {
-  const s = raw != null ? String(raw) : '';
-  if (!s || s === '—') return '—';
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
+  return formatPakistanDateTimeMedium(raw);
 }
 
 /** API uses `submitted_at`; older clients may use other keys. */
@@ -194,12 +188,7 @@ export function MySubmissionsScreen() {
       return bv - av;
     });
 
-    const today = new Date();
-    const startOfToday = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-    ).getTime();
+    const startOfToday = getPakistanDayStartMs();
     const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000;
     let activeSection = '';
 
@@ -425,7 +414,7 @@ export function MySubmissionsScreen() {
                               Water log
                             </Text>
                             <Text className="text-xs text-amber-800 dark:text-amber-300">
-                              {new Date(q.createdAt).toLocaleString()}
+                              {formatPakistanDateTimeMedium(q.createdAt)}
                             </Text>
                           </View>
                         ))}

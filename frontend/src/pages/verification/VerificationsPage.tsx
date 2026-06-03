@@ -39,6 +39,7 @@ import { getApiErrorMessage } from "../../lib/api-error";
 import { useAuth } from "../../contexts/AuthContext";
 import { isTehsilManager } from "../../constants/roles";
 import { tehsilRoutes } from "../../constants/routes";
+import { formatPakistanDateTime } from "../../utils/pakistanTime";
 
 type QueueRow = {
   id: string;
@@ -60,19 +61,6 @@ type QueueRow = {
     total_water_pumped?: number | null;
   };
 };
-
-function formatDateTime(value?: string | null) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function statusBadge(status: QueueRow["status"]) {
   switch (status) {
@@ -285,10 +273,10 @@ export default function VerificationsPage() {
                         </TableCell>
                         <TableCell>{r.operator_email || "—"}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                          {formatDateTime(r.submitted_at)}
+                          {formatPakistanDateTime(r.submitted_at)}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                          {formatDateTime(r.reviewed_at ?? null)}
+                          {formatPakistanDateTime(r.reviewed_at ?? null)}
                         </TableCell>
                         <TableCell className="text-sm">
                           {r.reviewed_by_name || "—"}

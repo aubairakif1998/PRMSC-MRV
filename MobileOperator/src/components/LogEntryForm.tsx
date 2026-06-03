@@ -46,6 +46,12 @@ import {
   isIsoDatePastOrToday,
   isValidIsoDate,
 } from '../utils/formValidation'
+import {
+  getPakistanDay,
+  getPakistanMonth,
+  getPakistanYear,
+  nowIsoTimestamp,
+} from '../utils/pakistanTime'
 
 type Props = {
   type: LogType
@@ -148,7 +154,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     navigation.reset({ index: 0, routes: [{ name: 'Home' }] })
   }
 
-  const currentYear = new Date().getFullYear()
+  const currentYear = getPakistanYear()
   /** Full calendar date for `log_date` (defaults to today). */
   const [logDateIso, setLogDateIso] = useState(() => getLocalIsoDateString())
   const [tehsil, setTehsil] = useState('')
@@ -204,8 +210,8 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
   const payload = useMemo<WaterLogInput>(() => {
     const parts = parseIsoToYmd(logDateIso)
     const y = parts?.y ?? currentYear
-    const m = parts?.m ?? new Date().getMonth() + 1
-    const d = parts?.d ?? new Date().getDate()
+    const m = parts?.m ?? getPakistanMonth()
+    const d = parts?.d ?? getPakistanDay()
     const hasTimes =
       pumpStartTime.trim().length > 0 && pumpEndTime.trim().length > 0
     return {
@@ -251,8 +257,8 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     )
     const wp: WaterLogInput = {
       year: Number(draft.year ?? currentYear),
-      month: Number(draft.month ?? new Date().getMonth() + 1),
-      day: Number(draft.day ?? new Date().getDate()),
+      month: Number(draft.month ?? getPakistanMonth()),
+      day: Number(draft.day ?? getPakistanDay()),
       tehsil: String(draft.tehsil ?? ''),
       village: String(draft.village ?? ''),
       settlement: draft.settlement ? String(draft.settlement) : undefined,
@@ -479,7 +485,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
           payload,
           evidence: noBulkMeterInstalled ? null : asset,
           existingImageUrl: noBulkMeterInstalled ? undefined : (existingDraftImageUrl ?? undefined),
-          createdAt: new Date().toISOString(),
+          createdAt: nowIsoTimestamp(),
           idempotencyKey: createIdempotencyKey('water_draft'),
         })
         Alert.alert('Queued', 'No internet. Draft will be saved to the server when online.')
@@ -522,7 +528,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     payload: payload as WaterLogInput,
     evidence: noBulkMeterInstalled ? null : asset,
     existingImageUrl: noBulkMeterInstalled ? undefined : (existingDraftImageUrl ?? undefined),
-    createdAt: new Date().toISOString(),
+    createdAt: nowIsoTimestamp(),
     idempotencyKey: createIdempotencyKey('water'),
   })
 

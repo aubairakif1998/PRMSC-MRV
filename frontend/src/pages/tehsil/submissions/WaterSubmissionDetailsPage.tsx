@@ -45,6 +45,7 @@ import { Textarea } from "../../../components/ui/textarea";
 import { tehsilRoutes } from "../../../constants/routes";
 import { useTehsilManagerOperatorApi } from "../../../hooks";
 import { getApiErrorMessage } from "../../../lib/api-error";
+import { formatPakistanDateTime } from "../../../utils/pakistanTime";
 
 type DetailResponse = {
   submission?: {
@@ -97,19 +98,6 @@ type DetailResponse = {
     created_at?: string | null;
   }>;
 };
-
-function formatDateTime(value?: string | null) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function kv(v: unknown) {
   if (v === null || v === undefined || v === "") return "—";
@@ -365,15 +353,15 @@ export default function WaterSubmissionDetailsPage() {
                 <CardContent className="space-y-1 text-sm">
                   <p>
                     <span className="text-muted-foreground">Submitted:</span>{" "}
-                    {formatDateTime(submission.submitted_at)}
+                    {formatPakistanDateTime(submission.submitted_at)}
                   </p>
                   <p>
                     <span className="text-muted-foreground">Last edited:</span>{" "}
-                    {formatDateTime(record?.last_edited_at)}
+                    {formatPakistanDateTime(record?.last_edited_at)}
                   </p>
                   <p>
                     <span className="text-muted-foreground">Reviewed:</span>{" "}
-                    {formatDateTime(submission.reviewed_at)}
+                    {formatPakistanDateTime(submission.reviewed_at)}
                   </p>
                 </CardContent>
               </Card>
@@ -503,7 +491,7 @@ export default function WaterSubmissionDetailsPage() {
                         {audit.map((l, idx) => (
                           <TableRow key={`${l.action_type}-${idx}`}>
                             <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                              {formatDateTime(l.created_at)}
+                              {formatPakistanDateTime(l.created_at)}
                             </TableCell>
                             <TableCell className="font-medium">{kv(l.action_type)}</TableCell>
                             <TableCell>{kv(l.performed_by)}</TableCell>

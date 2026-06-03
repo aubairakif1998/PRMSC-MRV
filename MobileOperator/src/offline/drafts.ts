@@ -1,6 +1,7 @@
 import { STORAGE_KEYS } from '../storage/keys'
 import { getJson, setJson } from '../storage/jsonStorage'
 import type { LogType, WaterLogInput } from '../types/operator'
+import { nowIsoTimestamp } from '../utils/pakistanTime'
 
 export type DraftRecord = {
   id: string
@@ -28,7 +29,7 @@ export async function saveDraft(type: LogType, payload: WaterLogInput): Promise<
     id: `${type}-${Date.now()}`,
     type,
     payload,
-    createdAt: new Date().toISOString(),
+    createdAt: nowIsoTimestamp(),
   })
   await setJson(keyByType(type), drafts.slice(0, 50))
 }

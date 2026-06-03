@@ -15,6 +15,7 @@ import type {
 } from "./loggingComplianceTypes";
 import { downloadSolarComplianceExcel } from "./exportComplianceExcel";
 import SolarLoggingComplianceSection from "./SolarLoggingComplianceSection";
+import { getPakistanYear } from "../../../utils/pakistanTime";
 
 export default function SolarLoggingCompliancePage() {
   const baseId = useId();
@@ -23,14 +24,14 @@ export default function SolarLoggingCompliancePage() {
   const [solarSites, setSolarSites] = useState<SolarSystemListItem[]>([]);
   const [sitesLoading, setSitesLoading] = useState(true);
   const [selectedSolarSystemId, setSelectedSolarSystemId] = useState("");
-  const [solarYear, setSolarYear] = useState(() => new Date().getFullYear());
+  const [solarYear, setSolarYear] = useState(() => getPakistanYear());
   const [yearData, setYearData] = useState<SolarMonthlyYearPayload | null>(
     null,
   );
   const [loading, setLoading] = useState(false);
 
   const yearOptions = useMemo(() => {
-    const y = new Date().getFullYear();
+    const y = getPakistanYear();
     return Array.from({ length: 9 }, (_, i) => y - 4 + i);
   }, []);
 

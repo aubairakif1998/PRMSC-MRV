@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import { getLocalIsoDateString, isValidIsoDate } from '../utils/formValidation';
+import { getPakistanDateParts } from '../utils/pakistanTime';
 import { Label } from './ui/label';
 import { Text } from './ui/text';
 
@@ -50,8 +51,8 @@ function parseIsoParts(iso: string): { y: number; m: number; d: number } | null 
 }
 
 function todayParts(): { y: number; m: number; d: number } {
-  const n = new Date();
-  return { y: n.getFullYear(), m: n.getMonth() + 1, d: n.getDate() };
+  const { year, month, day } = getPakistanDateParts();
+  return { y: year, m: month, d: day };
 }
 
 type Props = {

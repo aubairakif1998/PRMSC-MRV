@@ -61,6 +61,7 @@ import type {
   WaterSystemCalibrationCertificate,
   WaterSystemRow,
 } from "../../../../types/api";
+import { formatPakistanDate, nowIsoTimestamp } from "../../../../utils/pakistanTime";
 
 type ToastType = "success" | "error";
 type MeterUpdateMode = "update_current" | "switch_new";
@@ -99,12 +100,7 @@ export default function WaterSystemEditPage() {
     }
   };
 
-  const fmtDate = (value?: string | null) => {
-    if (!value) return "—";
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return value;
-    return d.toLocaleDateString("en-GB");
-  };
+  const fmtDate = formatPakistanDate;
 
   const [formData, setFormData] = useState({
     latitude: "",
@@ -328,7 +324,7 @@ export default function WaterSystemEditPage() {
           id: String(saved.id ?? ""),
           water_system_id: systemId,
           file_url: fileUrl,
-          uploaded_at: String(saved.uploaded_at ?? new Date().toISOString()),
+          uploaded_at: String(saved.uploaded_at ?? nowIsoTimestamp()),
           expiry_date: certExpiry,
           is_active: true,
           created_at: String(saved.created_at ?? null),
@@ -894,7 +890,7 @@ export default function WaterSystemEditPage() {
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="space-y-2">
                         <Label>
-                          Tank capacity (OHR)
+                          Tank capacity (m3)
                           <RequiredMark />
                         </Label>
                         <Input
@@ -907,7 +903,7 @@ export default function WaterSystemEditPage() {
                       </div>
                       <div className="space-y-2">
                         <Label>
-                          Required to fill tank (OHR)
+                          Design time to fill tank (minutes)
                           <RequiredMark />
                         </Label>
                         <Input
@@ -933,7 +929,7 @@ export default function WaterSystemEditPage() {
                       </div>
                       <div className="space-y-2">
                         <Label>
-                          Pump head
+                          Pump head (m)
                           <RequiredMark />
                         </Label>
                         <Input
@@ -946,7 +942,7 @@ export default function WaterSystemEditPage() {
                       </div>
                       <div className="space-y-2">
                         <Label>
-                          Time to fill (minutes)
+                          Actual time to fill the tank (minutes)
                           <RequiredMark />
                         </Label>
                         <Input

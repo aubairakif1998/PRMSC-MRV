@@ -42,6 +42,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import companyLogo from "../assets/company-logo.png";
 import { getActiveWaterSystemCalibrationCertificates } from "../services/tehsilManagerOperatorService";
+import { pakistanCalendarDayDiff } from "../utils/pakistanTime";
 
 type MenuItem = {
   path?: string;
@@ -192,9 +193,6 @@ const MainLayout = () => {
 
     let cancelled = false;
 
-    const startOfDay = (d: Date) =>
-      new Date(d.getFullYear(), d.getMonth(), d.getDate());
-
     const loadCertificateAlertCount = async () => {
       try {
         const rows =
@@ -202,16 +200,12 @@ const MainLayout = () => {
             certificate?: { expiry_date?: string | null };
           }>;
         const list = Array.isArray(rows) ? rows : [];
-        const today = startOfDay(new Date());
-        const nextWeek = new Date(today);
-        nextWeek.setDate(today.getDate() + 7);
 
         const count = list.filter((r) => {
           const raw = r?.certificate?.expiry_date;
           if (!raw) return false;
-          const d = startOfDay(new Date(raw));
-          if (Number.isNaN(d.getTime())) return false;
-          return d <= nextWeek;
+          const daysRemaining = pakistanCalendarDayDiff(String(raw).slice(0, 10));
+          return daysRemaining <= 7;
         }).length;
 
         if (!cancelled) setCertificateAlertCount(count);

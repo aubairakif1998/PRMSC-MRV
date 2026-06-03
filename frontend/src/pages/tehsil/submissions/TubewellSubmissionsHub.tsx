@@ -51,6 +51,7 @@ import { tehsilRoutes } from "../../../constants/routes";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useTehsilManagerOperatorApi } from "../../../hooks";
 import { getApiErrorMessage } from "../../../lib/api-error";
+import { formatPakistanDateTime, getPakistanYear } from "../../../utils/pakistanTime";
 
 type TubewellSubmissionRow = {
   id: string;
@@ -77,19 +78,6 @@ type TubewellSubmissionRow = {
     bulk_meter_image_url?: string | null;
   };
 };
-
-function formatDateTime(value?: string | null) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function fmt2(v: unknown) {
   if (v === null || v === undefined || v === "") return "—";
@@ -137,7 +125,7 @@ function statusBadge(status: TubewellSubmissionRow["status"]) {
   }
 }
 
-const currentYear = new Date().getFullYear();
+const currentYear = getPakistanYear();
 const YEAR_OPTIONS = Array.from({ length: 8 }, (_, i) => currentYear - 5 + i);
 const MONTH_OPTIONS = [
   { v: "", label: "All months" },
@@ -639,10 +627,10 @@ export default function TubewellSubmissionsHub() {
                               {r.operator_email || "—"}
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                              {formatDateTime(r.submitted_at)}
+                              {formatPakistanDateTime(r.submitted_at)}
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                              {formatDateTime(
+                              {formatPakistanDateTime(
                                 r.system_info?.last_edited_at ?? null,
                               )}
                             </TableCell>

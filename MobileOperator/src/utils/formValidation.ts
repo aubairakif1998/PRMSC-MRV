@@ -2,6 +2,13 @@
  * Shared helpers for operator registration forms: numeric/date sanitization and validation.
  */
 
+import {
+  getPakistanDay,
+  getPakistanIsoDateString,
+  getPakistanMonth,
+  getPakistanYear,
+} from './pakistanTime';
+
 /** Keeps digits and at most one decimal point (positive decimal typing). */
 export function sanitizePositiveDecimalInput(raw: string): string {
   let s = raw.replace(/[^\d.]/g, '');
@@ -51,13 +58,9 @@ export function isValidIsoDate(s: string): boolean {
   );
 }
 
-/** Today's date in local time as YYYY-MM-DD (for comparisons with ISO date strings). */
+/** Today's date in Pakistan (PKT) as YYYY-MM-DD. */
 export function getLocalIsoDateString(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return getPakistanIsoDateString();
 }
 
 /** Valid ISO date that is not after today (local calendar). */
@@ -80,9 +83,8 @@ export function clampIsoDateToMax(s: string, maxIso: string): string {
  * Whether a calendar year/month is not after the current month (for monthly logs).
  */
 export function isYearMonthNotAfterNow(year: number, month: number): boolean {
-  const now = new Date();
-  const cy = now.getFullYear();
-  const cm = now.getMonth() + 1;
+  const cy = getPakistanYear();
+  const cm = getPakistanMonth();
   if (year > cy) return false;
   if (year < cy) return true;
   return month <= cm;
@@ -95,10 +97,9 @@ export function daysInMonth(year: number, month: number): number {
 
 /** Calendar date (local) not after end of today. */
 export function isYmdNotAfterNow(year: number, month: number, day: number): boolean {
-  const now = new Date();
-  const cy = now.getFullYear();
-  const cm = now.getMonth() + 1;
-  const cd = now.getDate();
+  const cy = getPakistanYear();
+  const cm = getPakistanMonth();
+  const cd = getPakistanDay();
   if (year > cy) return false;
   if (year < cy) return true;
   if (month > cm) return false;

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { formatPakistanDateTimeMedium } from '../../utils/pakistanTime';
 import { Alert, FlatList, Image, RefreshControl, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -121,7 +122,7 @@ export function DraftsScreen({ navigation }: Props) {
         renderItem={({ item }) => {
           const meta = prettyMeta(item);
           const createdLabel = item.created_at
-            ? new Date(item.created_at).toLocaleString()
+            ? formatPakistanDateTimeMedium(item.created_at)
             : '';
           return (
           <Card className="overflow-hidden border-border/70 bg-background py-3">

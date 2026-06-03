@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { formatPakistanDateTimeMedium } from '../../utils/pakistanTime';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -340,7 +341,7 @@ export function HomeScreen({ navigation }: Props) {
                       Water log
                     </Text>
                     <Text className="text-muted-foreground text-xs">
-                      {new Date(item.createdAt).toLocaleString()}
+                      {formatPakistanDateTimeMedium(item.createdAt)}
                     </Text>
                   </View>
                 </View>

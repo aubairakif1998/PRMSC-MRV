@@ -41,6 +41,11 @@ import {
 import { tehsilRoutes } from "../../../constants/routes";
 import { cn } from "../../../lib/utils";
 import { getApiErrorMessage } from "../../../lib/api-error";
+import {
+  getPakistanIsoDateString,
+  getPakistanMonth,
+  getPakistanYear,
+} from "../../../utils/pakistanTime";
 import { getLoggingCompliance } from "../../../services/tehsilManagerOperatorService";
 
 type AssignedOperator = {
@@ -161,11 +166,7 @@ function formatAssignedOperatorsTitle(
 }
 
 function todayIsoDate(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return getPakistanIsoDateString();
 }
 
 type SectionTab = "water" | "solar";
@@ -178,8 +179,8 @@ export default function LoggingCompliance() {
 
   const [section, setSection] = useState<SectionTab>("water");
   const [waterDate, setWaterDate] = useState(todayIsoDate);
-  const [solarYear, setSolarYear] = useState(new Date().getFullYear());
-  const [solarMonth, setSolarMonth] = useState(new Date().getMonth() + 1);
+  const [solarYear, setSolarYear] = useState(getPakistanYear());
+  const [solarMonth, setSolarMonth] = useState(getPakistanMonth());
   const [data, setData] = useState<CompliancePayload | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -226,7 +227,7 @@ export default function LoggingCompliance() {
   }, [data?.solar_systems]);
 
   const yearOptions = useMemo(() => {
-    const y = new Date().getFullYear();
+    const y = getPakistanYear();
     return Array.from({ length: 8 }, (_, i) => y - 4 + i);
   }, []);
 

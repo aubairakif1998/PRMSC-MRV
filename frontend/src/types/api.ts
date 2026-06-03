@@ -99,12 +99,16 @@ export type SolarMonthlySupplyListItem = {
   id: string;
   year: number;
   month: number;
+  tou_required?: boolean | null;
   export_off_peak?: number | null;
   export_peak?: number | null;
   import_off_peak?: number | null;
   import_peak?: number | null;
   net_off_peak?: number | null;
   net_peak?: number | null;
+  export_total?: number | null;
+  import_total?: number | null;
+  net_total?: number | null;
   remarks?: string | null;
   electricity_bill_image_url?: string | null;
   created_at?: string | null;

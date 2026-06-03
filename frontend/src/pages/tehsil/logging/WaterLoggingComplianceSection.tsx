@@ -31,6 +31,7 @@ import { tehsilRoutes } from "../../../constants/routes";
 import { Button } from "../../../components/ui/button";
 import { cn } from "../../../lib/utils";
 import { downloadWaterComplianceExcel } from "./exportComplianceExcel";
+import { formatPakistanIsoDateLabel } from "../../../utils/pakistanTime";
 import {
   type WaterDailyRangeDay,
   type WaterDailyRangePayload,
@@ -58,20 +59,11 @@ type WaterLoggingComplianceSectionProps = {
 };
 
 function formatDayLabel(isoDate: string): string {
-  const d = new Date(`${isoDate}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return isoDate;
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatPakistanIsoDateLabel(isoDate);
 }
 
 function shortDate(isoDate: string): string {
-  const d = new Date(`${isoDate}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return isoDate;
-  return d.toLocaleDateString(undefined, {
+  return formatPakistanIsoDateLabel(isoDate, {
     month: "short",
     day: "numeric",
   });

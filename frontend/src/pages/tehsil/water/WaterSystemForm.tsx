@@ -287,12 +287,12 @@ const WaterSystemForm = () => {
     height_to_ohr: "Height to OHR",
     pump_flow_rate: "Flow Rate",
     bulk_meter_installed: "Bulk meter installed",
-    ohr_tank_capacity: "Tank capacity (OHR)",
-    ohr_fill_required: "Required to fill tank (OHR)",
+    ohr_tank_capacity: "Tank capacity (m3)",
+    ohr_fill_required: "Design time to fill tank (minutes)",
     pump_capacity: "Pump capacity (kW)",
-    pump_head: "Pump head",
+    pump_head: "Pump head (m)",
     pump_horse_power: "Pump horse power (HP)",
-    time_to_fill: "Time to fill",
+    time_to_fill: "Actual time to fill the tank",
     meter_model: "Meter Model",
     meter_serial_number: "Meter Serial Number",
     meter_accuracy_class: "Accuracy Class",
@@ -799,7 +799,7 @@ const WaterSystemForm = () => {
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="space-y-2">
                         <Label>
-                          Tank capacity (OHR) <RequiredMark />
+                          Tank capacity (m3) <RequiredMark />
                         </Label>
                         <Input
                           type="number"
@@ -814,7 +814,7 @@ const WaterSystemForm = () => {
                       </div>
                       <div className="space-y-2">
                         <Label>
-                          Required to fill tank (OHR) <RequiredMark />
+                          Design time to fill tank (minutes) <RequiredMark />
                         </Label>
                         <Input
                           type="number"
@@ -844,7 +844,7 @@ const WaterSystemForm = () => {
                       </div>
                       <div className="space-y-2">
                         <Label>
-                          Pump head <RequiredMark />
+                          Pump head (m) <RequiredMark />
                         </Label>
                         <Input
                           type="number"
@@ -859,7 +859,7 @@ const WaterSystemForm = () => {
                       </div>
                       <div className="space-y-2">
                         <Label>
-                          Time to fill (minutes) <RequiredMark />
+                          Actual time to fill the tank (minutes) <RequiredMark />
                         </Label>
                         <Input
                           type="number"

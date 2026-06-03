@@ -1,6 +1,10 @@
 import * as XLSX from "xlsx";
 
 import {
+  formatNowPakistanDateTime,
+  formatPakistanIsoDateLabel,
+} from "../../../utils/pakistanTime";
+import {
   MONTH_NAMES,
   formatAssignedOperators,
   waterStatusLabel,
@@ -14,14 +18,7 @@ function sanitizeFilename(name: string): string {
 }
 
 function formatWaterTableDate(isoDate: string): string {
-  const d = new Date(`${isoDate}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return isoDate;
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatPakistanIsoDateLabel(isoDate);
 }
 
 function solarTableStatus(monthlyStatus: string): string {
@@ -59,7 +56,7 @@ export function downloadWaterComplianceExcel(
   const intro: (string | number)[][] = [
     ["Water logging compliance"],
     [],
-    ["Exported", new Date().toLocaleString()],
+    ["Exported", formatNowPakistanDateTime()],
     ["Site", data.unique_identifier],
     ["Location", location || "—"],
     ["Tehsil", data.tehsil || "—"],
@@ -105,7 +102,7 @@ export function downloadSolarComplianceExcel(data: SolarMonthlyYearPayload): voi
   const intro: (string | number)[][] = [
     ["Solar monthly logging compliance"],
     [],
-    ["Exported", new Date().toLocaleString()],
+    ["Exported", formatNowPakistanDateTime()],
     ["Site", data.unique_identifier],
     ["Location", location || "—"],
     ["Tehsil", data.tehsil || "—"],

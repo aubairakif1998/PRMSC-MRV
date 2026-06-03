@@ -1117,16 +1117,20 @@ def submit_solar_data():
         assert_user_may_access_solar_system(user, ss, for_write=True)
     except TehsilAccessDenied:
         return jsonify({"message": "Access denied for this solar system"}), 403
+    normalized, norm_error = _normalize_solar_monthly_fields(data or {})
+    if norm_error:
+        return jsonify({"message": norm_error}), 400
+
     new_record = SolarEnergyLoggingMonthly(
         solar_system_id=data.get('solar_system_id'),
         year=data.get('year'),
         month=data.get('month'),
-        export_off_peak=data.get("export_off_peak"),
-        export_peak=data.get("export_peak"),
-        import_off_peak=data.get("import_off_peak"),
-        import_peak=data.get("import_peak"),
-        net_off_peak=data.get("net_off_peak"),
-        net_peak=data.get("net_peak"),
+        export_off_peak=normalized.get("export_off_peak"),
+        export_peak=normalized.get("export_peak"),
+        import_off_peak=normalized.get("import_off_peak"),
+        import_peak=normalized.get("import_peak"),
+        net_off_peak=normalized.get("net_off_peak"),
+        net_peak=normalized.get("net_peak"),
     )
     db.session.add(new_record)
     db.session.commit()
@@ -1175,6 +1179,84 @@ def _require_fields(data: dict, keys: list[str]) -> list[str]:
         if isinstance(v, str) and not v.strip():
             missing.append(k)
     return missing
+
+
+def _solar_monthly_tou_required(payload: dict) -> bool:
+    explicit = _coerce_optional_bool(payload.get("tou_required"))
+    if explicit is not None:
+        return explicit
+    return any(
+        payload.get(k) not in (None, "")
+        for k in ("export_peak", "import_peak", "net_peak")
+    )
+
+
+def _normalize_solar_monthly_fields(payload: dict) -> tuple[dict, str | None]:
+    """Accept either TOU split fields or aggregate import/export/net fields."""
+    tou_required = _solar_monthly_tou_required(payload)
+    try:
+        if tou_required:
+            return (
+                {
+                    "tou_required": True,
+                    "export_off_peak": _coerce_optional_float(payload.get("export_off_peak")),
+                    "export_peak": _coerce_optional_float(payload.get("export_peak")),
+                    "import_off_peak": _coerce_optional_float(payload.get("import_off_peak")),
+                    "import_peak": _coerce_optional_float(payload.get("import_peak")),
+                    "net_off_peak": _coerce_optional_float(payload.get("net_off_peak")),
+                    "net_peak": _coerce_optional_float(payload.get("net_peak")),
+                },
+                None,
+            )
+
+        export_total = _coerce_optional_float(payload.get("export_total"))
+        import_total = _coerce_optional_float(payload.get("import_total"))
+        net_total = _coerce_optional_float(payload.get("net_total"))
+        return (
+            {
+                "tou_required": False,
+                # Store aggregate values in off-peak columns for compatibility.
+                "export_off_peak": export_total,
+                "export_peak": None,
+                "import_off_peak": import_total,
+                "import_peak": None,
+                "net_off_peak": net_total,
+                "net_peak": None,
+            },
+            None,
+        )
+    except ValueError as exc:
+        return {}, str(exc)
+
+
+def _solar_monthly_response_fields(record: SolarEnergyLoggingMonthly) -> dict:
+    tou_required = any(
+        getattr(record, k) is not None for k in ("export_peak", "import_peak", "net_peak")
+    )
+    if tou_required:
+        export_total = (
+            (record.export_off_peak if record.export_off_peak is not None else 0.0)
+            + (record.export_peak if record.export_peak is not None else 0.0)
+        )
+        import_total = (
+            (record.import_off_peak if record.import_off_peak is not None else 0.0)
+            + (record.import_peak if record.import_peak is not None else 0.0)
+        )
+        net_total = (
+            (record.net_off_peak if record.net_off_peak is not None else 0.0)
+            + (record.net_peak if record.net_peak is not None else 0.0)
+        )
+    else:
+        export_total = record.export_off_peak
+        import_total = record.import_off_peak
+        net_total = record.net_off_peak
+
+    return {
+        "tou_required": tou_required,
+        "export_total": export_total,
+        "import_total": import_total,
+        "net_total": net_total,
+    }
 
 
 def _current_meter_payload(data: dict, meter_type: str, fallback: dict | None = None) -> dict:
@@ -2088,6 +2170,7 @@ def get_solar_supply_data():
 
     out = []
     for r in records:
+        derived = _solar_monthly_response_fields(r)
         out.append(
             {
                 "id": str(r.id),
@@ -2103,6 +2186,7 @@ def get_solar_supply_data():
                 "electricity_bill_image_url": r.electricity_bill_image_url,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
                 "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                **derived,
             }
         )
     return jsonify(out), 200
@@ -2124,6 +2208,7 @@ def get_solar_supply_data_record(record_id):
     except TehsilAccessDenied:
         return jsonify({"message": "Access denied for this solar site"}), 403
 
+    derived = _solar_monthly_response_fields(record)
     return (
         jsonify(
             {
@@ -2144,6 +2229,7 @@ def get_solar_supply_data_record(record_id):
                 "electricity_bill_image_url": record.electricity_bill_image_url,
                 "created_at": record.created_at.isoformat() if record.created_at else None,
                 "updated_at": record.updated_at.isoformat() if record.updated_at else None,
+                **derived,
             }
         ),
         200,
@@ -2170,19 +2256,18 @@ def update_solar_supply_data_record(record_id):
         return jsonify({"message": "Access denied for this solar site"}), 403
 
     data = request.get_json() or {}
-    try:
-        for k in (
-            "export_off_peak",
-            "export_peak",
-            "import_off_peak",
-            "import_peak",
-            "net_off_peak",
-            "net_peak",
-        ):
-            if k in data:
-                setattr(record, k, _coerce_optional_float(data.get(k)))
-    except ValueError as exc:
-        return jsonify({"message": str(exc)}), 400
+    normalized, norm_error = _normalize_solar_monthly_fields(data)
+    if norm_error:
+        return jsonify({"message": norm_error}), 400
+    for k in (
+        "export_off_peak",
+        "export_peak",
+        "import_off_peak",
+        "import_peak",
+        "net_off_peak",
+        "net_peak",
+    ):
+        setattr(record, k, normalized.get(k))
 
     if "remarks" in data:
         record.remarks = data.get("remarks")
@@ -2290,27 +2375,19 @@ def save_solar_supply_data():
             row_energy_error = False
             for month_record in monthly_data:
                 month = month_record.get('month')
-                try:
-                    export_off_peak = _coerce_optional_float(
-                        month_record.get("export_off_peak")
-                    )
-                    export_peak = _coerce_optional_float(
-                        month_record.get("export_peak")
-                    )
-                    import_off_peak = _coerce_optional_float(
-                        month_record.get("import_off_peak")
-                    )
-                    import_peak = _coerce_optional_float(
-                        month_record.get("import_peak")
-                    )
-                    net_off_peak = _coerce_optional_float(month_record.get("net_off_peak"))
-                    net_peak = _coerce_optional_float(month_record.get("net_peak"))
-                except ValueError as exc:
+                normalized, norm_error = _normalize_solar_monthly_fields(month_record or {})
+                if norm_error:
                     errors.append(
-                        f"Row {i+1}, month {month_record.get('month')}: {exc}"
+                        f"Row {i+1}, month {month_record.get('month')}: {norm_error}"
                     )
                     row_energy_error = True
                     break
+                export_off_peak = normalized.get("export_off_peak")
+                export_peak = normalized.get("export_peak")
+                import_off_peak = normalized.get("import_off_peak")
+                import_peak = normalized.get("import_peak")
+                net_off_peak = normalized.get("net_off_peak")
+                net_peak = normalized.get("net_peak")
                 # Check if record exists
                 existing = SolarEnergyLoggingMonthly.query.filter_by(
                     solar_system_id=system.id,

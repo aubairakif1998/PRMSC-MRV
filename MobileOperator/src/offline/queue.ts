@@ -4,6 +4,7 @@ import { STORAGE_KEYS } from '../storage/keys'
 import { getJson, setJson } from '../storage/jsonStorage'
 import type { QueueItem } from '../types/operator'
 import { saveWaterSupplyData, saveWaterSupplyDraft, uploadEvidenceFile } from '../api/operator'
+import { nowIsoTimestamp } from '../utils/pakistanTime'
 
 type DrainQueueResult = {
   processed: number
@@ -90,7 +91,7 @@ async function appendDropped(item: QueueItem, reason: string): Promise<void> {
   const dropped = (await getJson<QueueFailureRecord[]>(STORAGE_KEYS.submitQueueDropped)) ?? []
   dropped.unshift({
     ...item,
-    droppedAt: new Date().toISOString(),
+    droppedAt: nowIsoTimestamp(),
     dropReason: reason,
   })
   await setJson(STORAGE_KEYS.submitQueueDropped, dropped.slice(0, 100))
@@ -182,7 +183,7 @@ export async function drainQueue(): Promise<DrainQueueResult> {
           ...item,
           attemptCount: nextAttempt,
           lastError: message,
-          lastTriedAt: new Date().toISOString(),
+          lastTriedAt: nowIsoTimestamp(),
         }
         queue = [updatedItem, ...queue.slice(1)]
         result.retained += 1
@@ -193,7 +194,7 @@ export async function drainQueue(): Promise<DrainQueueResult> {
             ...item,
             attemptCount: nextAttempt,
             lastError: message,
-            lastTriedAt: new Date().toISOString(),
+            lastTriedAt: nowIsoTimestamp(),
           },
           `non_retryable_${message}`,
         )
