@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Bar,
-  BarChart,
   CartesianGrid,
   ComposedChart,
   Legend,
@@ -11,7 +10,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Building2, Clock, Droplets, Gauge, Sun, Zap } from "lucide-react";
 import { useProgramDashboardApi } from "../../hooks";
 import { getApiErrorMessage } from "../../lib/api-error";
 import { LOCATION_DATA, TEHSIL_OPTIONS } from "../../utils/locationData";
@@ -19,6 +17,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { isExecutiveRole } from "../../constants/roles";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
+import { Skeleton } from "../../components/ui/skeleton";
 import {
   Card,
   CardContent,
@@ -32,15 +31,10 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "../../components/ui/accordion";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../components/ui/select";
-import { Skeleton } from "../../components/ui/skeleton";
 import SystemsMapCard from "./SystemsMapCard";
+import OrganizationKpiPanel, {
+  type ScopeFilters,
+} from "./OrganizationKpiPanel";
 
 type SummaryData = {
   ohr_count: number;
@@ -132,6 +126,8 @@ type ProgramDashboardProps = {
   managementView?: boolean;
   /** Executive layout: show map before KPI sections. */
   mapPosition?: "top" | "inline";
+  /** Field-ops anomaly table; hidden on COO organization KPI view. */
+  showAnomalies?: boolean;
 };
 
 const ProgramDashboard = ({
@@ -139,6 +135,7 @@ const ProgramDashboard = ({
   headingDescription = "Water and solar performance by area and time period.",
   managementView = true,
   mapPosition = "inline",
+  showAnomalies = false,
 }: ProgramDashboardProps) => {
   const { user } = useAuth();
   const showSystemsMap = isExecutiveRole(user?.role);
@@ -163,12 +160,6 @@ const ProgramDashboard = ({
     getWaterAnomalies,
   } = useProgramDashboardApi();
 
-  const [filters, setFilters] = useState(() => ({
-    tehsil: initialTehsil,
-    village: "All Villages",
-    month: "All Months",
-    year: "2026",
-  }));
   const [activeFilters, setActiveFilters] = useState(() => ({
     tehsil: initialTehsil,
     village: "All Villages",
@@ -189,27 +180,18 @@ const ProgramDashboard = ({
   const [error, setError] = useState("");
 
   const villageOptions = useMemo(() => {
-    if (filters.tehsil === "All Tehsils") return ["All Villages"];
+    if (activeFilters.tehsil === "All Tehsils") return ["All Villages"];
     return [
       "All Villages",
-      ...((LOCATION_DATA[filters.tehsil.toUpperCase()] || []) as string[]),
+      ...((LOCATION_DATA[activeFilters.tehsil.toUpperCase()] || []) as string[]),
     ];
-  }, [filters.tehsil]);
+  }, [activeFilters.tehsil]);
 
   // Manager-ops scoped users: lock filters to their allowed tehsils (no "All Tehsils").
   useEffect(() => {
     if (!restrictTehsils) return;
     const first = allowedTehsils[0];
     if (!first) return;
-    setFilters((prev) => {
-      if (
-        prev.tehsil !== "All Tehsils" &&
-        allowedTehsils.includes(prev.tehsil)
-      ) {
-        return prev;
-      }
-      return { ...prev, tehsil: first, village: "All Villages" };
-    });
     setActiveFilters((prev) => {
       if (
         prev.tehsil !== "All Tehsils" &&
@@ -247,14 +229,18 @@ const ProgramDashboard = ({
         setSolarGeneration((solar || []) as RowData[]);
         setGridImport((grid || []) as RowData[]);
 
-        try {
-          const anom = (await getWaterAnomalies({
-            tehsil: apiFilters.tehsil,
-            village: apiFilters.village,
-            days: 4,
-          })) as { items?: AnomalyItem[] };
-          setAnomalyItems(Array.isArray(anom?.items) ? anom.items : []);
-        } catch {
+        if (showAnomalies) {
+          try {
+            const anom = (await getWaterAnomalies({
+              tehsil: apiFilters.tehsil,
+              village: apiFilters.village,
+              days: 4,
+            })) as { items?: AnomalyItem[] };
+            setAnomalyItems(Array.isArray(anom?.items) ? anom.items : []);
+          } catch {
+            setAnomalyItems([]);
+          }
+        } else {
           setAnomalyItems([]);
         }
       } catch (err) {
@@ -264,7 +250,7 @@ const ProgramDashboard = ({
       }
     };
     void load();
-  }, [activeFilters]);
+  }, [activeFilters, showAnomalies]);
 
   const activeScopeLabel = useMemo(() => {
     const tehsil =
@@ -367,16 +353,6 @@ const ProgramDashboard = ({
     [pumpByMonth],
   );
 
-  const waterPumpCombinedChartData = useMemo(
-    () =>
-      MONTHS.map((m, i) => ({
-        month: m,
-        waterM3: waterByMonth[i] ?? 0,
-        pumpH: pumpByMonth[i] ?? 0,
-      })),
-    [waterByMonth, pumpByMonth],
-  );
-
   const solarProgramChartData = useMemo(
     () =>
       MONTHS.map((m, i) => ({
@@ -387,16 +363,28 @@ const ProgramDashboard = ({
     [solarByMonth, gridByMonth],
   );
 
+  const updateScope = useCallback((patch: Partial<ScopeFilters>) => {
+    setActiveFilters((prev) => {
+      const next = { ...prev, ...patch };
+      if (patch.tehsil !== undefined) next.village = "All Villages";
+      return next;
+    });
+  }, []);
+
   return (
-    <div className="min-h-screen bg-muted/30 p-4 md:p-6">
+    <div className="min-h-screen bg-gradient-to-b from-muted/40 to-muted/20 p-4 md:p-6">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
-        <div className="space-y-2">
-          <h1 className="font-heading text-2xl font-semibold tracking-tight md:text-3xl">
-            {headingTitle}
-          </h1>
-          <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
-            {headingDescription}
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="font-heading text-2xl font-semibold tracking-tight md:text-3xl">
+                {headingTitle}
+              </h1>
+            </div>
+            <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
+              {headingDescription}
+            </p>
+          </div>
         </div>
 
         {managementView ? (
@@ -407,103 +395,6 @@ const ProgramDashboard = ({
           </p>
         ) : null}
 
-        <Card className="shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Filters</CardTitle>
-            <CardDescription>
-              Select tehsil, village, year (optional month refines totals).
-            </CardDescription>
-            <p className="pt-2 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Showing:</span>{" "}
-              {activeScopeLabel}
-            </p>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-5">
-            <Select
-              value={filters.tehsil}
-              onValueChange={(v) =>
-                setFilters((prev) => ({
-                  ...prev,
-                  tehsil: v ?? prev.tehsil,
-                  village: "All Villages",
-                }))
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(restrictTehsils
-                  ? allowedTehsils
-                  : ["All Tehsils", ...allowedTehsils]
-                ).map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={filters.village}
-              onValueChange={(v) =>
-                setFilters((prev) => ({ ...prev, village: v ?? prev.village }))
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {villageOptions.map((v) => (
-                  <SelectItem key={v} value={v}>
-                    {v}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={filters.month}
-              onValueChange={(v) =>
-                setFilters((prev) => ({ ...prev, month: v ?? prev.month }))
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All Months">All Months</SelectItem>
-                {MONTHS.map((m, i) => (
-                  <SelectItem key={m} value={String(i + 1)}>
-                    {m}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={filters.year}
-              onValueChange={(v) =>
-                setFilters((prev) => ({ ...prev, year: v ?? prev.year }))
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {YEARS.map((y) => (
-                  <SelectItem key={y} value={String(y)}>
-                    {y}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              onClick={() => setActiveFilters(filters)}
-              className="w-full"
-            >
-              Apply Filters
-            </Button>
-          </CardContent>
-        </Card>
-
         {error ? (
           <Card>
             <CardContent className="pt-6 text-sm text-destructive">
@@ -512,156 +403,45 @@ const ProgramDashboard = ({
           </Card>
         ) : null}
 
-        {showSystemsMap && mapPosition === "top" ? (
-          <SystemsMapCard
-            mapFilters={{
-              tehsil: activeFilters.tehsil,
-              village: activeFilters.village,
-            }}
-            summaryCounts={
-              loading
-                ? null
-                : { water: summary.ohr_count, solar: summary.solar_facilities }
-            }
-          />
-        ) : null}
-
-        <div className="space-y-3">
-          <h2 className="text-base font-semibold tracking-tight text-foreground">
-            Sites on programme
-          </h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <Card className="border-border/70 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardDescription className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <Building2 className="size-3.5 text-blue-600" />
-                  Tube wells registered
-                </CardDescription>
-                <CardTitle className="font-heading text-3xl tabular-nums">
-                  {loading ? (
-                    <Skeleton className="h-9 w-24" />
-                  ) : (
-                    formatKpiValue(summary.ohr_count)
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-xs text-muted-foreground">
-                  Water systems in scope.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/70 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardDescription className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <Sun className="size-3.5 text-amber-600" />
-                  Solar sites registered
-                </CardDescription>
-                <CardTitle className="font-heading text-3xl tabular-nums">
-                  {loading ? (
-                    <Skeleton className="h-9 w-24" />
-                  ) : (
-                    formatKpiValue(summary.solar_facilities)
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-xs text-muted-foreground">
-                  Solar sites in scope.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <h2 className="text-base font-semibold tracking-tight text-foreground">
-            Totals for this selection
-          </h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Card className="bg-card shadow-sm">
-              <CardHeader className="pb-2">
-                <CardDescription className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <Droplets className="size-3.5 text-blue-600" />
-                  Water delivered
-                </CardDescription>
-                <CardTitle className="font-heading text-2xl tabular-nums sm:text-3xl">
-                  {loading ? (
-                    <Skeleton className="h-8 w-28" />
-                  ) : (
-                    `${formatKpiValue(periodTotals.waterM3)} m³`
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-xs text-muted-foreground">
-                  Water volume (m³).
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="bg-card shadow-sm">
-              <CardHeader className="pb-2">
-                <CardDescription className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <Clock className="size-3.5 text-sky-600" />
-                  Pump run time
-                </CardDescription>
-                <CardTitle className="font-heading text-2xl tabular-nums sm:text-3xl">
-                  {loading ? (
-                    <Skeleton className="h-8 w-28" />
-                  ) : (
-                    `${formatKpiValue(periodTotals.pumpH)} h`
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-xs text-muted-foreground">
-                  Pump runtime (h).
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="bg-card shadow-sm">
-              <CardHeader className="pb-2">
-                <CardDescription className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <Sun className="size-3.5 text-amber-600" />
-                  Solar to grid
-                </CardDescription>
-                <CardTitle className="font-heading text-2xl tabular-nums sm:text-3xl">
-                  {loading ? (
-                    <Skeleton className="h-8 w-28" />
-                  ) : (
-                    `${formatKpiValue(periodTotals.solarKwh)} kWh`
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-xs text-muted-foreground">
-                  Exported to grid.
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="bg-card shadow-sm">
-              <CardHeader className="pb-2">
-                <CardDescription className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <Zap className="size-3.5 text-red-600" />
-                  Grid electricity used
-                </CardDescription>
-                <CardTitle className="font-heading text-2xl tabular-nums sm:text-3xl">
-                  {loading ? (
-                    <Skeleton className="h-8 w-28" />
-                  ) : (
-                    `${formatKpiValue(periodTotals.gridKwh)} kWh`
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-xs text-muted-foreground">
-                  Imported from grid.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+        <OrganizationKpiPanel
+          loading={loading}
+          year={activeFilters.year}
+          scopeLabel={activeScopeLabel}
+          scopeTooltip={activeScopeTooltip}
+          summary={summary}
+          periodTotals={periodTotals}
+          meterCoveragePct={meterCoveragePct}
+          waterVolumeChartData={waterVolumeChartData}
+          pumpOnlyChartData={pumpOnlyChartData}
+          solarProgramChartData={solarProgramChartData}
+          formatKpiValue={formatKpiValue}
+          formatTooltipNumber={formatTooltipNumber}
+          scopeFilters={activeFilters}
+          onScopeChange={updateScope}
+          villageOptions={villageOptions}
+          allowedTehsils={allowedTehsils}
+          restrictTehsils={restrictTehsils}
+          scopeFilterYears={YEARS}
+          scopeFilterMonths={MONTHS}
+          mapSlot={
+            showSystemsMap && mapPosition === "top" ? (
+              <SystemsMapCard
+                key={`${activeFilters.tehsil}|${activeFilters.village}`}
+                compact
+                scopeLabel={activeScopeLabel}
+                dataSyncing={loading}
+                mapFilters={{
+                  tehsil: activeFilters.tehsil,
+                  village: activeFilters.village,
+                }}
+                summaryCounts={{
+                  water: summary.ohr_count,
+                  solar: summary.solar_facilities,
+                }}
+              />
+            ) : undefined
+          }
+        />
 
         {showSystemsMap && mapPosition === "inline" ? (
           <SystemsMapCard
@@ -677,6 +457,7 @@ const ProgramDashboard = ({
           />
         ) : null}
 
+        {showAnomalies ? (
         <Card className="shadow-sm">
           <CardHeader>
             <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -882,158 +663,7 @@ const ProgramDashboard = ({
             )}
           </CardContent>
         </Card>
-
-        <div className="space-y-3">
-          <h2 className="text-base font-semibold tracking-tight text-foreground">
-            Year view ({activeFilters.year})
-          </h2>
-          <div className="flex flex-col gap-6">
-            <Card className="shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base">Water programme</CardTitle>
-                <CardDescription>
-                  Monthly totals from daily logs (m³ and pump hours).
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-8 overflow-x-auto">
-                <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Water pumped (m³) and pump run (h) — monthly
-                  </p>
-                  <div className="h-[340px] min-w-[680px] w-full">
-                    {loading ? (
-                      <Skeleton className="h-full w-full" />
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart
-                          data={waterPumpCombinedChartData}
-                          barCategoryGap={12}
-                        >
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            vertical={false}
-                          />
-                          <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                          <YAxis
-                            yAxisId="left"
-                            tick={{ fontSize: 11 }}
-                            tickFormatter={(v) => formatKpiValue(Number(v))}
-                            label={{
-                              value: "m³",
-                              angle: -90,
-                              position: "insideLeft",
-                              style: { fontSize: 11, fill: "#64748b" },
-                            }}
-                          />
-                          <YAxis
-                            yAxisId="right"
-                            orientation="right"
-                            tick={{ fontSize: 11 }}
-                            tickFormatter={(v) => formatKpiValue(Number(v))}
-                            label={{
-                              value: "h",
-                              angle: 90,
-                              position: "insideRight",
-                              style: { fontSize: 11, fill: "#64748b" },
-                            }}
-                          />
-                          <Tooltip
-                            labelFormatter={(label) =>
-                              `${String(label)} · ${activeScopeTooltip}`
-                            }
-                            formatter={(value, name) => {
-                              const n = Number(value ?? 0);
-                              if (name === "Water pumped") {
-                                return [`${formatTooltipNumber(n)} m³`, name];
-                              }
-                              if (name === "Pump run time") {
-                                return [`${formatTooltipNumber(n)} h`, name];
-                              }
-                              return [formatTooltipNumber(n), String(name)];
-                            }}
-                          />
-                          <Legend />
-                          <Bar
-                            yAxisId="left"
-                            dataKey="waterM3"
-                            name="Water pumped"
-                            fill="#3b82f6"
-                            radius={[4, 4, 0, 0]}
-                          />
-                          <Bar
-                            yAxisId="right"
-                            dataKey="pumpH"
-                            name="Pump run time"
-                            fill="#0ea5e9"
-                            radius={[4, 4, 0, 0]}
-                          />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base">Solar programme</CardTitle>
-                <CardDescription>
-                  Monthly energy (kWh): export vs import.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="overflow-x-auto">
-                <div className="h-[320px] min-w-[680px] w-full">
-                  {loading ? (
-                    <Skeleton className="h-full w-full" />
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={solarProgramChartData}
-                        barCategoryGap={12}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                        <YAxis
-                          tick={{ fontSize: 11 }}
-                          tickFormatter={(v) => formatKpiValue(Number(v))}
-                          label={{
-                            value: "kWh",
-                            angle: -90,
-                            position: "insideLeft",
-                            style: { fontSize: 11, fill: "#64748b" },
-                          }}
-                        />
-                        <Tooltip
-                          labelFormatter={(label) =>
-                            `${String(label)} · ${activeScopeTooltip}`
-                          }
-                          formatter={(value, name) => [
-                            `${formatTooltipNumber(Number(value ?? 0))} kWh`,
-                            String(name),
-                          ]}
-                        />
-                        <Legend />
-                        <Bar
-                          dataKey="solarKwh"
-                          name="Solar to grid"
-                          fill="#d97706"
-                          radius={[4, 4, 0, 0]}
-                        />
-                        <Bar
-                          dataKey="gridKwh"
-                          name="Grid power used"
-                          fill="#ef4444"
-                          radius={[4, 4, 0, 0]}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+        ) : null}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useCallback } from 'react'
 import {
   Alert,
   Image,
@@ -13,18 +13,27 @@ import {
   TextInput,
   View,
 } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker'
 
 import { LOCATION_DATA, SETTLEMENT_DATA, TEHSIL_OPTIONS } from '../utils/locationData'
+import {
+  bulkMeterOrderErrorMessage,
+  formatMeterM3,
+  maxSubmittedMeterEndFromRows,
+} from '../utils/bulkMeter'
 import type { EvidenceAsset, LogType, QueueItem, WaterLogInput } from '../types/operator'
 import type { RootStackParamList } from '../navigation/types'
-import { createIdempotencyKey, enqueue, isOnline } from '../offline/queue'
-import { getQueue } from '../offline/queue'
+import { createIdempotencyKey, enqueue, findQueueConflict, getQueue, isOnline } from '../offline/queue'
+import {
+  formatQueueItemSummary,
+  getQueueTypeLabel,
+} from '../offline/queueDisplay'
 import {
   getMySignature,
   getWaterDraftById,
+  getWaterMeterContext,
   getWaterSupplyData,
   getWaterSystems,
   saveWaterSupplyData,
@@ -161,7 +170,13 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
   const [village, setVillage] = useState('')
   const [settlement, setSettlement] = useState('')
 
-  const [totalWater, setTotalWater] = useState('')
+  const [meterReadingStart, setMeterReadingStart] = useState('')
+  const [meterReadingEnd, setMeterReadingEnd] = useState('')
+  const [isFirstBulkMeterLog, setIsFirstBulkMeterLog] = useState(false)
+  const [priorLogCount, setPriorLogCount] = useState(0)
+  const [previousMeterReadingEnd, setPreviousMeterReadingEnd] = useState<number | null>(null)
+  const [meterContextLoading, setMeterContextLoading] = useState(false)
+  const [meterContextError, setMeterContextError] = useState(false)
   const [pumpStartTime, setPumpStartTime] = useState('')
   const [pumpEndTime, setPumpEndTime] = useState('')
   const [dayEntries, setDayEntries] = useState<Array<Record<string, unknown>>>([])
@@ -174,6 +189,7 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
   const [draftSaving, setDraftSaving] = useState(false)
   const [draftRefreshing, setDraftRefreshing] = useState(false)
   const [online, setOnline] = useState(true)
+  const [queueItems, setQueueItems] = useState<QueueItem[]>([])
   const [queuedCount, setQueuedCount] = useState(0)
   const [activeDraftId, setActiveDraftId] = useState<string | null>(draftId ?? null)
   const [existingDraftImageUrl, setExistingDraftImageUrl] = useState<string | null>(null)
@@ -222,7 +238,8 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       village,
       settlement: settlement || undefined,
       noBulkMeterInstalled,
-      totalWaterPumping: totalWater ? Number(totalWater) : null,
+      meterReadingStart: meterReadingStart ? Number(meterReadingStart) : null,
+      meterReadingEnd: meterReadingEnd ? Number(meterReadingEnd) : null,
       pumpStartTime: hasTimes ? normalizeTo24hWithSeconds(pumpStartTime) : null,
       pumpEndTime: hasTimes ? normalizeTo24hWithSeconds(pumpEndTime) : null,
     }
@@ -232,16 +249,35 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     pumpEndTime,
     pumpStartTime,
     noBulkMeterInstalled,
+    meterReadingStart,
+    meterReadingEnd,
     settlement,
     tehsil,
-    totalWater,
     village,
   ])
 
-  useEffect(() => {
-    isOnline().then(setOnline).catch(() => setOnline(false))
-    getQueue().then((items) => setQueuedCount(items.length)).catch(() => {})
+  const refreshQueueState = useCallback(async () => {
+    try {
+      const items = await getQueue()
+      setQueueItems(items)
+      setQueuedCount(items.length)
+    } catch {
+      setQueueItems([])
+      setQueuedCount(0)
+    }
   }, [])
+
+  const queuedForThisForm = useMemo(
+    () => findQueueConflict(queueItems, payload, 'submit')?.existing ?? null,
+    [queueItems, payload],
+  )
+
+  useFocusEffect(
+    useCallback(() => {
+      isOnline().then(setOnline).catch(() => setOnline(false))
+      refreshQueueState()
+    }, [refreshQueueState]),
+  )
 
   const loadDraftFromServer = async (id: string) => {
     const draft = await getWaterDraftById(id)
@@ -255,6 +291,12 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
           ? normalizeRemoteImageUrl(draft.bulk_meter_image_url)
           : null,
     )
+    const endReading =
+      draft.meter_reading_end != null
+        ? Number(draft.meter_reading_end)
+        : draft.total_water_pumped != null
+          ? Number(draft.total_water_pumped)
+          : null
     const wp: WaterLogInput = {
       year: Number(draft.year ?? currentYear),
       month: Number(draft.month ?? getPakistanMonth()),
@@ -262,8 +304,9 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       tehsil: String(draft.tehsil ?? ''),
       village: String(draft.village ?? ''),
       settlement: draft.settlement ? String(draft.settlement) : undefined,
-      totalWaterPumping:
-        draft.total_water_pumped != null ? Number(draft.total_water_pumped) : null,
+      meterReadingEnd: endReading,
+      meterReadingStart:
+        draft.meter_reading_start != null ? Number(draft.meter_reading_start) : null,
       pumpStartTime: draft.pump_start_time ?? null,
       pumpEndTime: draft.pump_end_time ?? null,
     }
@@ -282,9 +325,13 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     setTehsil(wp.tehsil ?? '')
     setVillage(wp.village ?? '')
     setSettlement(wp.settlement ?? '')
-    setTotalWater(wp.totalWaterPumping != null ? String(wp.totalWaterPumping) : '')
+    setMeterReadingEnd(wp.meterReadingEnd != null ? String(wp.meterReadingEnd) : '')
+    setMeterReadingStart(
+      wp.meterReadingStart != null ? String(wp.meterReadingStart) : '',
+    )
     if (!hasBulkMeter) {
-      setTotalWater('')
+      setMeterReadingEnd('')
+      setMeterReadingStart('')
       setAsset(null)
     }
     setPumpStartTime(
@@ -331,7 +378,8 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
         if (!hasBulkMeter) {
           setAsset(null)
           setExistingDraftImageUrl(null)
-          setTotalWater('')
+          setMeterReadingEnd('')
+          setMeterReadingStart('')
         }
       } catch {
         // keep manual entry
@@ -344,22 +392,197 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     }
   }, [draftId, systemId, navigation])
 
+  const computedIntervalM3 = useMemo(() => {
+    if (noBulkMeterInstalled) return null
+    const endVal = Number(meterReadingEnd)
+    if (!Number.isFinite(endVal)) return null
+    const base = isFirstBulkMeterLog
+      ? Number(meterReadingStart)
+      : previousMeterReadingEnd
+    if (base == null || !Number.isFinite(base)) return null
+    const delta = endVal - base
+    return delta > 0 ? delta : null
+  }, [
+    isFirstBulkMeterLog,
+    meterReadingEnd,
+    meterReadingStart,
+    noBulkMeterInstalled,
+    previousMeterReadingEnd,
+  ])
+
+  const meterReadingOrderError = useMemo(
+    () =>
+      noBulkMeterInstalled
+        ? null
+        : bulkMeterOrderErrorMessage({
+            isFirstBulkMeterLog,
+            meterReadingEnd,
+            meterReadingStart,
+            previousMeterReadingEnd,
+          }),
+    [
+      isFirstBulkMeterLog,
+      meterReadingEnd,
+      meterReadingStart,
+      noBulkMeterInstalled,
+      previousMeterReadingEnd,
+    ],
+  )
+
+  const pumpStopPlaceholder = useMemo(() => {
+    if (noBulkMeterInstalled) return 'Enter cumulative meter reading'
+    if (isFirstBulkMeterLog) {
+      if (!isValidNumberInput(meterReadingStart)) {
+        return 'Enter reading after pump stops'
+      }
+      return `Must be greater than ${formatMeterM3(Number(meterReadingStart))} m³`
+    }
+    if (previousMeterReadingEnd != null && Number.isFinite(previousMeterReadingEnd)) {
+      return `Must be greater than ${formatMeterM3(previousMeterReadingEnd)} m³`
+    }
+    return 'Enter reading after pump stops'
+  }, [
+    isFirstBulkMeterLog,
+    meterReadingStart,
+    noBulkMeterInstalled,
+    previousMeterReadingEnd,
+  ])
+
+  useEffect(() => {
+    if (noBulkMeterInstalled) {
+      setMeterContextLoading(false)
+      setMeterContextError(false)
+      setIsFirstBulkMeterLog(false)
+      setPriorLogCount(0)
+      setPreviousMeterReadingEnd(null)
+      return
+    }
+    if (locationLocked && facilityPrefetching) return
+
+    const canFetch =
+      (systemId != null && systemId !== '') || (Boolean(tehsil) && Boolean(village))
+    if (!canFetch) return
+
+    let cancelled = false
+    setMeterContextLoading(true)
+    setMeterContextError(false)
+    ;(async () => {
+      const applyFallbackFromRows = async (): Promise<number | null> => {
+        const parts = parseIsoToYmd(logDateIso)
+        if (!parts) return null
+        let fallback: number | null = null
+        for (const y of [parts.y, parts.y - 1]) {
+          let rows: Array<Record<string, unknown>>
+          if (systemId != null && systemId !== '') {
+            rows = (await getWaterSupplyData({
+              systemId,
+              year: y,
+            })) as Array<Record<string, unknown>>
+          } else if (tehsil && village) {
+            rows = (await getWaterSupplyData({
+              tehsil,
+              village,
+              settlement,
+              year: y,
+            })) as Array<Record<string, unknown>>
+          } else {
+            continue
+          }
+          const candidate = maxSubmittedMeterEndFromRows(rows)
+          if (candidate != null && (fallback == null || candidate > fallback)) {
+            fallback = candidate
+          }
+        }
+        return fallback
+      }
+
+      try {
+        const ctx = await getWaterMeterContext({
+          tehsil: tehsil || undefined,
+          village: village || undefined,
+          settlement: settlement || undefined,
+          systemId: systemId ?? undefined,
+          logDate: logDateIso,
+          excludeRecordId: activeDraftId ?? undefined,
+        })
+        if (cancelled) return
+        const prev =
+          ctx.previous_meter_reading_end != null
+            ? Number(ctx.previous_meter_reading_end)
+            : null
+        const resolvedPrev =
+          prev != null && Number.isFinite(prev) ? prev : null
+        setPreviousMeterReadingEnd(resolvedPrev)
+        setPriorLogCount(
+          typeof ctx.prior_log_count === 'number' ? ctx.prior_log_count : 0,
+        )
+        setIsFirstBulkMeterLog(
+          ctx.is_first_bulk_meter_log ??
+            (typeof ctx.prior_log_count === 'number'
+              ? ctx.prior_log_count === 0
+              : resolvedPrev == null),
+        )
+        if (resolvedPrev == null) {
+          const fallback = await applyFallbackFromRows()
+          if (cancelled) return
+          if (fallback != null) {
+            setPreviousMeterReadingEnd(fallback)
+            setIsFirstBulkMeterLog(false)
+          }
+        }
+      } catch {
+        if (cancelled) return
+        try {
+          const fallback = await applyFallbackFromRows()
+          if (cancelled) return
+          if (fallback != null) {
+            setPreviousMeterReadingEnd(fallback)
+            setIsFirstBulkMeterLog(false)
+            setPriorLogCount((n) => Math.max(n, 1))
+            setMeterContextError(false)
+            return
+          }
+        } catch {
+          // ignore fallback failure
+        }
+        setMeterContextError(true)
+        setIsFirstBulkMeterLog(false)
+        setPreviousMeterReadingEnd(null)
+      } finally {
+        if (!cancelled) setMeterContextLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    activeDraftId,
+    facilityPrefetching,
+    locationLocked,
+    logDateIso,
+    noBulkMeterInstalled,
+    settlement,
+    systemId,
+    tehsil,
+    village,
+  ])
+
   // Fetch existing same-day logs so we can warn on duplicate start/end interval.
   useEffect(() => {
     if (!systemId || draftId) return
-    if (!tehsil || !village) return
     const parts = parseIsoToYmd(logDateIso)
     if (!parts) return
+    const hasLocation = Boolean(tehsil) && Boolean(village)
+    if (!hasLocation && (systemId == null || systemId === '')) return
 
     let cancelled = false
     ;(async () => {
       try {
-        const rows = await getWaterSupplyData({
-          tehsil,
-          village,
-          settlement,
-          year: parts.y,
-        })
+        const rows = await getWaterSupplyData(
+          systemId != null && systemId !== ''
+            ? { systemId, year: parts.y }
+            : { tehsil, village, settlement, year: parts.y },
+        )
         if (cancelled) return
         const sameDay = rows.filter((r) => {
           if (!r || typeof r !== 'object') return false
@@ -421,11 +644,28 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
         Alert.alert('Validation', 'Evidence image is mandatory. Please attach an image.')
         return false
       }
-      if (!isValidNumberInput(totalWater)) {
+      if (!isValidNumberInput(meterReadingEnd)) {
         Alert.alert(
           'Validation',
-          'Total Water Pumped (m³) is required and must be numeric.',
+          'Meter reading at pump stop (m³) is required and must be numeric.',
         )
+        return false
+      }
+      if (isFirstBulkMeterLog && !isValidNumberInput(meterReadingStart)) {
+        Alert.alert(
+          'Validation',
+          'Initial meter reading before pump start is required for the first log on this system.',
+        )
+        return false
+      }
+      const meterOrderErr = bulkMeterOrderErrorMessage({
+        isFirstBulkMeterLog,
+        meterReadingEnd,
+        meterReadingStart,
+        previousMeterReadingEnd,
+      })
+      if (meterOrderErr) {
+        Alert.alert('Invalid meter reading', meterOrderErr)
         return false
       }
     }
@@ -475,8 +715,26 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       Alert.alert('Draft', 'Please attach an evidence image before saving a draft.')
       return
     }
+    if (!noBulkMeterInstalled && isValidNumberInput(meterReadingEnd)) {
+      const meterOrderErr = bulkMeterOrderErrorMessage({
+        isFirstBulkMeterLog,
+        meterReadingEnd,
+        meterReadingStart,
+        previousMeterReadingEnd,
+      })
+      if (meterOrderErr) {
+        Alert.alert('Invalid meter reading', meterOrderErr)
+        return
+      }
+    }
     setDraftSaving(true)
     try {
+      const queue = await getQueue()
+      const conflict = findQueueConflict(queue, payload, 'draft')
+      if (conflict) {
+        Alert.alert(conflict.title, conflict.message)
+        return
+      }
       const currentlyOnline = await isOnline()
       if (!currentlyOnline) {
         await enqueue({
@@ -488,7 +746,11 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
           createdAt: nowIsoTimestamp(),
           idempotencyKey: createIdempotencyKey('water_draft'),
         })
-        Alert.alert('Queued', 'No internet. Draft will be saved to the server when online.')
+        await refreshQueueState()
+        Alert.alert(
+          'Draft queued',
+          'No internet. Your draft was saved offline and will sync to the server when you are back online.',
+        )
         resetToHome()
         return
       }
@@ -586,6 +848,12 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
     setSaving(true)
     const queueItem = makeQueueItem()
     try {
+      const queue = await getQueue()
+      const conflict = findQueueConflict(queue, payload, 'submit')
+      if (conflict) {
+        Alert.alert(conflict.title, conflict.message)
+        return
+      }
       const signedOk = await ensureSignatureBeforeSubmit()
       if (!signedOk) return
       if (!signatureChecked) {
@@ -598,9 +866,11 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       const currentlyOnline = await isOnline()
       if (!currentlyOnline) {
         await enqueue(queueItem)
-        const items = await getQueue()
-        setQueuedCount(items.length)
-        Alert.alert('Queued', 'No internet. Submission queued and will sync later.')
+        await refreshQueueState()
+        Alert.alert(
+          'Submission queued',
+          'No internet. Your water log was saved offline and will submit when you are back online.',
+        )
         resetToHome()
       } else {
         await submitOnline(queueItem.idempotencyKey ?? createIdempotencyKey(type))
@@ -614,11 +884,10 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
       if (!stillOnline) {
         try {
           await enqueue(queueItem)
-          const items = await getQueue()
-          setQueuedCount(items.length)
+          await refreshQueueState()
           Alert.alert(
-            'Queued',
-            `${getApiErrorMessage(e, 'Request failed.')}\n\nNo internet. Submission queued and will sync later.`,
+            'Submission queued',
+            `${getApiErrorMessage(e, 'Request failed.')}\n\nNo internet. Your water log was saved offline and will submit when you are back online.`,
           )
           resetToHome()
         } catch {
@@ -691,26 +960,42 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
               </View>
             ) : null}
 
-            <View style={[styles.statusBanner, !online && styles.statusBannerOffline]}>
+            <View
+              style={[
+                styles.statusBanner,
+                !online && styles.statusBannerOffline,
+                queuedForThisForm && styles.statusBannerQueued,
+              ]}
+            >
               <Text
                 style={[
                   styles.statusBannerText,
                   !online && styles.statusBannerTextOffline,
+                  queuedForThisForm && styles.statusBannerTextQueued,
                 ]}
               >
-                {online
-                  ? 'Online: submissions sync immediately.'
-                  : 'Offline: submissions will be queued.'}
-                {queuedCount ? ` Pending queue: ${queuedCount}` : ''}
+                {queuedForThisForm
+                  ? `${getQueueTypeLabel(queuedForThisForm.type)} already queued for this facility and date.`
+                  : online
+                    ? 'Online: submissions sync immediately.'
+                    : 'Offline: submissions will be queued.'}
+                {queuedCount && !queuedForThisForm
+                  ? ` ${queuedCount} item${queuedCount === 1 ? '' : 's'} waiting to sync.`
+                  : ''}
               </Text>
+              {queuedForThisForm ? (
+                <Text style={styles.statusBannerSubtext}>
+                  {formatQueueItemSummary(queuedForThisForm)} — review on Home or My Submissions.
+                </Text>
+              ) : null}
             </View>
 
             <View style={styles.requirementsBox}>
               <Text style={styles.requirementsTitle}>Required for submit</Text>
               <Text style={styles.requirementsBody}>
                 {noBulkMeterInstalled
-                  ? 'Log date (defaults to today), tehsil & village (and settlement if listed), and pump start & end time. Total water and meter photo are not required when no bulk meter is installed.'
-                  : 'Log date (defaults to today), tehsil & village (and settlement if listed), total water pumped (m³), pump start & end time (server calculates operating hours), and bulk meter photo.'}{' '}
+                  ? 'Log date (defaults to today), tehsil & village (and settlement if listed), and pump start & end time. Meter readings and photo are not required when no bulk meter is installed.'
+                  : 'Log date (defaults to today), tehsil & village (and settlement if listed), bulk meter readings at pump stop (and initial reading on first log), pump start & end time, and meter photo.'}{' '}
                 Sent as{' '}
                 <Text style={styles.requirementsMono}>monthlyData[]</Text> with{' '}
                 <Text style={styles.requirementsMono}>day</Text> for{' '}
@@ -779,19 +1064,104 @@ export function LogEntryForm({ type, draftId, systemId }: Props) {
             {!noBulkMeterInstalled ? (
               <>
                 <Text style={[styles.helper, styles.waterMeterHint]}>
-                  Enter the monthly total from your water meter reading (m³). Sent as{' '}
-                  <Text style={styles.requirementsMono}>total_water_pumped</Text>.
+                  Enter the cumulative bulk-meter reading (m³) when the pump stops. This value
+                  always increases — it is not the same as water pumped for one interval.
                 </Text>
 
-                <View style={styles.field}>
-                  <RequiredLabel>Total water pumped (m³)</RequiredLabel>
-                  <TextInput
-                    value={totalWater}
-                    onChangeText={(value) => setTotalWater(sanitizeDecimalInput(value))}
-                    keyboardType="decimal-pad"
-                    style={styles.input}
-                  />
+                <View
+                  style={[
+                    styles.meterBaselineBox,
+                    meterContextError ? styles.meterBaselineBoxError : null,
+                    meterContextLoading ? styles.meterBaselineBoxLoading : null,
+                    isFirstBulkMeterLog && !meterContextLoading
+                      ? styles.meterBaselineBoxFirst
+                      : null,
+                  ]}
+                >
+                  <Text style={styles.meterBaselineTitle}>
+                    Last submitted pump-stop reading (reference)
+                  </Text>
+                  {meterContextLoading ? (
+                    <Text style={styles.meterBaselineHint}>Loading last reading…</Text>
+                  ) : meterContextError ? (
+                    <Text style={styles.meterBaselineHint}>
+                      Could not load the last reading. Check your connection and reopen this
+                      form, or contact support if this continues.
+                    </Text>
+                  ) : previousMeterReadingEnd != null ? (
+                    <>
+                      <Text style={styles.meterBaselineValue}>
+                        {formatMeterM3(previousMeterReadingEnd)} m³
+                      </Text>
+                      <Text style={styles.meterBaselineHint}>
+                        The meter total goes up as the pump runs. Enter a pump-stop reading
+                        greater than this value.
+                      </Text>
+                    </>
+                  ) : priorLogCount > 0 ? (
+                    <Text style={styles.meterBaselineHint}>
+                      Earlier logs exist for this system but none have a pump-stop meter reading
+                      on file. Enter the current cumulative reading at pump stop.
+                    </Text>
+                  ) : (
+                    <Text style={styles.meterBaselineHint}>
+                      No prior submitted pump-stop reading on file — this is the first bulk-meter
+                      log for this system. Record the initial reading before pump start below.
+                    </Text>
+                  )}
                 </View>
+
+                {isFirstBulkMeterLog && !meterContextLoading ? (
+                  <View style={styles.field}>
+                    <RequiredLabel>Initial meter reading (before pump start, m³)</RequiredLabel>
+                    <Text style={styles.fieldHint}>
+                      First log on this system: record the meter before you start the pump.
+                    </Text>
+                    <TextInput
+                      value={meterReadingStart}
+                      onChangeText={(value) =>
+                        setMeterReadingStart(sanitizeDecimalInput(value))
+                      }
+                      keyboardType="decimal-pad"
+                      style={styles.input}
+                      placeholder="Reading before pump starts"
+                    />
+                  </View>
+                ) : null}
+
+                <View style={styles.field}>
+                  <RequiredLabel>Meter reading at pump stop (m³)</RequiredLabel>
+                  {!isFirstBulkMeterLog && previousMeterReadingEnd != null ? (
+                    <Text style={styles.fieldHint}>
+                      Enter a value greater than {formatMeterM3(previousMeterReadingEnd)} m³
+                    </Text>
+                  ) : isFirstBulkMeterLog && isValidNumberInput(meterReadingStart) ? (
+                    <Text style={styles.fieldHint}>
+                      Enter a value greater than {formatMeterM3(Number(meterReadingStart))} m³
+                    </Text>
+                  ) : null}
+                  <TextInput
+                    value={meterReadingEnd}
+                    onChangeText={(value) => setMeterReadingEnd(sanitizeDecimalInput(value))}
+                    keyboardType="decimal-pad"
+                    placeholder={pumpStopPlaceholder}
+                    style={[
+                      styles.input,
+                      meterReadingOrderError ? styles.inputError : null,
+                    ]}
+                  />
+                  {meterReadingOrderError ? (
+                    <Text style={styles.fieldError}>{meterReadingOrderError}</Text>
+                  ) : null}
+                </View>
+
+                {computedIntervalM3 != null ? (
+                  <View style={styles.facilityBadge}>
+                    <Text style={styles.facilityBadgeText}>
+                      Water pumped this interval: {computedIntervalM3.toFixed(2)} m³
+                    </Text>
+                  </View>
+                ) : null}
               </>
             ) : (
               <View style={styles.facilityBadge}>
@@ -997,8 +1367,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef2f2',
     borderColor: '#fecaca',
   },
+  statusBannerQueued: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fcd34d',
+  },
   statusBannerText: { color: '#1d4ed8', fontWeight: '700', fontSize: 12 },
   statusBannerTextOffline: { color: '#b91c1c' },
+  statusBannerTextQueued: { color: '#92400e' },
+  statusBannerSubtext: {
+    color: '#78350f',
+    fontSize: 11,
+    marginTop: 4,
+    lineHeight: 16,
+  },
   requirementsBox: {
     backgroundColor: '#f8fafc',
     borderWidth: 1,
@@ -1033,6 +1414,63 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     paddingHorizontal: 12,
     paddingVertical: 11,
+  },
+  inputError: {
+    borderColor: '#f87171',
+    backgroundColor: '#fef2f2',
+  },
+  fieldError: {
+    marginTop: 6,
+    color: '#b91c1c',
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+  },
+  fieldHint: {
+    marginBottom: 6,
+    color: '#1d4ed8',
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+  },
+  meterBaselineBox: {
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#93c5fd',
+    backgroundColor: '#eff6ff',
+    padding: 12,
+    gap: 4,
+  },
+  meterBaselineTitle: {
+    color: '#1e3a8a',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  meterBaselineValue: {
+    color: '#1d4ed8',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  meterBaselineHint: {
+    color: '#1e40af',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  meterBaselineBoxLoading: {
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+  },
+  meterBaselineBoxError: {
+    borderColor: '#fca5a5',
+    backgroundColor: '#fef2f2',
+  },
+  meterBaselineBoxFirst: {
+    borderColor: '#86efac',
+    backgroundColor: '#f0fdf4',
   },
   select: {
     borderWidth: 1,

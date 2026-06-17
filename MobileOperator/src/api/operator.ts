@@ -39,10 +39,17 @@ function buildWaterSupplyBody(
   opts: { status?: 'draft' | 'submitted'; imageUrl?: string },
 ): AnyRecord {
   const status = opts.status ?? 'submitted';
-  const tw =
-    input.totalWaterPumping != null &&
-    Number.isFinite(Number(input.totalWaterPumping))
-      ? Number(input.totalWaterPumping)
+  const meterEnd =
+    input.meterReadingEnd != null && Number.isFinite(Number(input.meterReadingEnd))
+      ? Number(input.meterReadingEnd)
+      : input.totalWaterPumping != null &&
+          Number.isFinite(Number(input.totalWaterPumping))
+        ? Number(input.totalWaterPumping)
+        : null;
+  const meterStart =
+    input.meterReadingStart != null &&
+    Number.isFinite(Number(input.meterReadingStart))
+      ? Number(input.meterReadingStart)
       : null;
   const hasTimes =
     typeof input.pumpStartTime === 'string' &&
@@ -53,8 +60,11 @@ function buildWaterSupplyBody(
   const monthRow: AnyRecord = {
     month: safeInt(input.month, getPakistanMonth()),
     day: safeInt(input.day, getPakistanDay()),
-    total_water_pumped: tw,
+    meter_reading_end: meterEnd,
   };
+  if (meterStart != null) {
+    monthRow.meter_reading_start = meterStart;
+  }
   if (hasTimes) {
     monthRow.pump_start_time = input.pumpStartTime!.trim();
     monthRow.pump_end_time = input.pumpEndTime!.trim();
@@ -139,18 +149,27 @@ export async function getSubmissionDetail(submissionId: string) {
 }
 
 export async function getWaterSupplyData(filters: {
-  tehsil: string;
-  village: string;
+  tehsil?: string;
+  village?: string;
   settlement?: string;
   year?: number | string;
+  systemId?: string | number;
 }): Promise<unknown[]> {
-  const params = new URLSearchParams({
-    tehsil: filters.tehsil,
-    village: filters.village,
-    settlement: filters.settlement ?? '',
-    ...(filters.year != null ? { year: String(filters.year) } : {}),
-  }).toString();
-  const res = await apiClient.get(`operator/water-supply-data?${params}`);
+  const params = new URLSearchParams();
+  if (filters.systemId != null) {
+    params.set('system_id', String(filters.systemId));
+  } else {
+    if (!filters.tehsil || !filters.village) {
+      throw new Error('tehsil and village are required when systemId is omitted');
+    }
+    params.set('tehsil', filters.tehsil);
+    params.set('village', filters.village);
+    params.set('settlement', filters.settlement ?? '');
+  }
+  if (filters.year != null) {
+    params.set('year', String(filters.year));
+  }
+  const res = await apiClient.get(`operator/water-supply-data?${params.toString()}`);
   return (res.data as unknown[]) ?? [];
 }
 
@@ -225,6 +244,8 @@ export type WaterDraftDetail = {
   pump_start_time?: string | null;
   pump_end_time?: string | null;
   pump_operating_hours?: number | null;
+  meter_reading_start?: number | null;
+  meter_reading_end?: number | null;
   total_water_pumped?: number | null;
   bulk_meter_image_url?: string | null;
   status?: string;
@@ -232,6 +253,42 @@ export type WaterDraftDetail = {
   village?: string | null;
   settlement?: string | null;
 };
+
+export type WaterMeterContext = {
+  bulk_meter_installed?: boolean;
+  /** Highest submitted meter_reading_end on this system (cumulative pump-stop reading). */
+  previous_meter_reading_end?: number | null;
+  has_submitted_meter_end?: boolean;
+  is_first_bulk_meter_log?: boolean;
+  prior_log_count?: number;
+  water_system_id?: string;
+};
+
+export async function getWaterMeterContext(filters: {
+  tehsil?: string;
+  village?: string;
+  settlement?: string;
+  systemId?: string | number;
+  logDate?: string;
+  pumpEndTime?: string;
+  excludeRecordId?: string;
+}): Promise<WaterMeterContext> {
+  const params = new URLSearchParams();
+  if (filters.systemId != null) {
+    params.set('system_id', String(filters.systemId));
+  } else {
+    if (filters.tehsil) params.set('tehsil', filters.tehsil);
+    if (filters.village) params.set('village', filters.village);
+    if (filters.settlement) params.set('settlement', filters.settlement);
+  }
+  if (filters.logDate) params.set('log_date', filters.logDate);
+  if (filters.pumpEndTime) params.set('pump_end_time', filters.pumpEndTime);
+  if (filters.excludeRecordId) {
+    params.set('exclude_record_id', filters.excludeRecordId);
+  }
+  const res = await apiClient.get(`operator/water-meter-context?${params.toString()}`);
+  return res.data as WaterMeterContext;
+}
 
 export async function getWaterDrafts(): Promise<WaterDraftSummary[]> {
   const res = await apiClient.get('operator/water-data/drafts');
@@ -256,12 +313,21 @@ export async function updateWaterDraftById(
     year: safeInt(input.year, getPakistanYear()),
     month: safeInt(input.month, getPakistanMonth()),
     day: safeInt(input.day, getPakistanDay()),
-    total_water_pumped:
-      input.totalWaterPumping != null &&
-      Number.isFinite(Number(input.totalWaterPumping))
-        ? Number(input.totalWaterPumping)
-        : null,
+    meter_reading_end:
+      input.meterReadingEnd != null &&
+      Number.isFinite(Number(input.meterReadingEnd))
+        ? Number(input.meterReadingEnd)
+        : input.totalWaterPumping != null &&
+            Number.isFinite(Number(input.totalWaterPumping))
+          ? Number(input.totalWaterPumping)
+          : null,
   };
+  if (
+    input.meterReadingStart != null &&
+    Number.isFinite(Number(input.meterReadingStart))
+  ) {
+    body.meter_reading_start = Number(input.meterReadingStart);
+  }
   if (typeof input.pumpStartTime === 'string' && input.pumpStartTime.trim()) {
     body.pump_start_time = input.pumpStartTime.trim();
   }

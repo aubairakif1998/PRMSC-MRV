@@ -38,6 +38,11 @@ import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Text } from '../../components/ui/text';
 import type { RootStackParamList } from '../../navigation/types';
 import { getQueue } from '../../offline/queue';
+import {
+  formatQueueItemLocation,
+  getQueueTypeLabel,
+  isDraftQueueItem,
+} from '../../offline/queueDisplay';
 import type { QueueItem } from '../../types/operator';
 
 const STATUS = ['all', 'submitted', 'verified', 'rejected'] as const;
@@ -401,20 +406,28 @@ export function MySubmissionsScreen() {
                       </AlertTitle>
                       <AlertDescription className="text-amber-900/90 dark:text-amber-200/90">
                         {queuedItems.length} offline{' '}
-                        {queuedItems.length === 1 ? 'entry' : 'entries'}. They
-                        upload when you are online.
+                        {queuedItems.length === 1 ? 'item' : 'items'} (submissions
+                        and drafts) waiting to sync when you are online.
                       </AlertDescription>
                       <View className="mt-3 gap-2 border-t border-amber-200/60 pt-3">
                         {queuedItems.slice(0, 4).map(q => (
-                          <View
-                            key={q.id}
-                            className="flex-row items-center justify-between"
-                          >
-                            <Text className="text-sm font-medium text-amber-950 dark:text-amber-100">
-                              Water log
-                            </Text>
-                            <Text className="text-xs text-amber-800 dark:text-amber-300">
-                              {formatPakistanDateTimeMedium(q.createdAt)}
+                          <View key={q.id} className="gap-0.5">
+                            <View className="flex-row items-center justify-between">
+                              <Text className="text-sm font-medium text-amber-950 dark:text-amber-100">
+                                {getQueueTypeLabel(q.type)}
+                              </Text>
+                              <Text className="text-xs text-amber-800 dark:text-amber-300">
+                                {formatPakistanDateTimeMedium(q.createdAt)}
+                              </Text>
+                            </View>
+                            <Text
+                              className="text-xs text-amber-900/80 dark:text-amber-200/80"
+                              numberOfLines={2}
+                            >
+                              {formatQueueItemLocation(q)}
+                              {isDraftQueueItem(q)
+                                ? ' · offline draft'
+                                : ' · offline submission'}
                             </Text>
                           </View>
                         ))}

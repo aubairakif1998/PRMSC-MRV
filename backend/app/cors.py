@@ -21,6 +21,8 @@ from flask_cors import CORS
 _DEV_FALLBACK_ORIGINS: Final[tuple[str, ...]] = (
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:4200",
@@ -94,4 +96,7 @@ def init_cors(app: Flask) -> None:
         allow_headers="*",
         supports_credentials=True,
         automatic_options=True,
+        # Ensure CORS headers are present even on error responses (500s),
+        # otherwise the browser reports it as a CORS failure and hides the real error.
+        always_send=True,
     )

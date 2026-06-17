@@ -118,6 +118,9 @@ type SubmissionRecordData = {
   pump_start_time?: string | null;
   pump_end_time?: string | null;
   pump_operating_hours?: number | string;
+  meter_reading_start?: number | string;
+  meter_reading_end?: number | string;
+  previous_meter_reading_end?: number | string;
   total_water_pumped?: number | string;
   export_off_peak?: number | string;
   export_peak?: number | string;
@@ -152,6 +155,7 @@ const getImageUrl = (path?: string) => {
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
   const parts = path.split(/[\\/]/);
   const filename = parts[parts.length - 1];
+  if (!filename) return "";
   const origin = getApiOrigin();
   return `${origin}/api/uploads/${encodeURIComponent(filename)}`;
 };
@@ -491,7 +495,19 @@ const SubmissionReview = () => {
                       )}
                     />
                     <MetaItem
-                      label="Total Water Pumped"
+                      label="Previous meter reading"
+                      value={infoValue(recordData?.previous_meter_reading_end, " m³")}
+                    />
+                    <MetaItem
+                      label="Initial / baseline reading"
+                      value={infoValue(recordData?.meter_reading_start, " m³")}
+                    />
+                    <MetaItem
+                      label="Meter reading at pump stop"
+                      value={infoValue(recordData?.meter_reading_end, " m³")}
+                    />
+                    <MetaItem
+                      label="Water pumped this interval"
                       value={infoValue(recordData?.total_water_pumped, " m³")}
                     />
                     <MetaItem

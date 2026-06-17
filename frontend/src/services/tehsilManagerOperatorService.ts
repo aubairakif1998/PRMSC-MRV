@@ -165,6 +165,20 @@ export const getDashboardGridImport = async (filters: QueryFilters = {}) => {
   return response.data;
 };
 
+export const getDashboardWaterSystemsDetail = async (filters: QueryFilters = {}) => {
+  const response = await api.get(
+    `/dashboard/water-systems-detail${buildQueryString(filters)}`,
+  );
+  return response.data;
+};
+
+export const getDashboardSolarSystemsDetail = async (filters: QueryFilters = {}) => {
+  const response = await api.get(
+    `/dashboard/solar-systems-detail${buildQueryString(filters)}`,
+  );
+  return response.data;
+};
+
 /** Last-3-days anomaly scan for water logging (scoped server-side by role + tehsils). */
 export const getWaterAnomalies = async (filters: QueryFilters = {}) => {
   const response = await api.get(`/operator/water-anomalies${buildQueryString(filters)}`);

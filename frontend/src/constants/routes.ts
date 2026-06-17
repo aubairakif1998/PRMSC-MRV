@@ -47,6 +47,12 @@ export const tehsilRoutes = {
 /** MRV COO & Manager Operations — organization-wide KPI. */
 export const HQ_DASHBOARD = "/hq";
 
+export const hqRoutes = {
+  dashboard: HQ_DASHBOARD,
+  waterAnalysis: `${HQ_DASHBOARD}/water`,
+  solarAnalysis: `${HQ_DASHBOARD}/solar`,
+} as const;
+
 /** Public auth flows */
 export const authRoutes = {
   login: "/login",

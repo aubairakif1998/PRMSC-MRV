@@ -14,8 +14,9 @@ const ExecutiveDashboard = () => {
     <ProgramDashboard
       headingTitle="Organization overview"
       headingDescription={`Enterprise view across tehsils: sites, water delivery, pump runtime, and solar energy. Signed in as ${subtitle}.`}
-      managementView
+      managementView={false}
       mapPosition="top"
+      showAnomalies={false}
     />
   );
 };

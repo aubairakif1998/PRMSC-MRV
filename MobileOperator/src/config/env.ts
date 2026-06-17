@@ -14,7 +14,7 @@ const isProdEnv = ENV === 'PROD' || ENV === 'PRODUCTION';
 const isDevEnv = ENV === 'DEV' || ENV === 'DEVELOPMENT' || ENV === 'LOCAL';
 
 const PROD_API_ORIGIN = 'https://prmsc-mrv-api.vercel.app';
-// const DEV_API_ORIGIN = 'http://127.0.0.1:5001';
+const DEV_API_ORIGIN = 'http://127.0.0.1:5001';
 
 /**
  * Priority order:
@@ -31,5 +31,5 @@ export const API_URL = EXPLICIT
   : isProdEnv
   ? normalizeApiUrl(PROD_API_ORIGIN)
   : isDevEnv
-  ? normalizeApiUrl(PROD_API_ORIGIN)
-  : normalizeApiUrl(PROD_API_ORIGIN);
+  ? normalizeApiUrl(DEV_API_ORIGIN)
+  : normalizeApiUrl(DEV_API_ORIGIN);

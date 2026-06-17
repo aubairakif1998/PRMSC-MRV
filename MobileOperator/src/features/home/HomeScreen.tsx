@@ -9,6 +9,11 @@ import { FileText, Inbox } from 'lucide-react-native';
 import type { RootStackParamList } from '../../navigation/types';
 import { useAuth } from '../../auth/AuthContext';
 import { drainQueue, getQueue } from '../../offline/queue';
+import {
+  formatQueueItemLocation,
+  getQueueTypeLabel,
+  isDraftQueueItem,
+} from '../../offline/queueDisplay';
 import type { QueueItem } from '../../types/operator';
 import { getWaterSystems } from '../../api/operator';
 import { Button } from '../../components/ui/button';
@@ -116,9 +121,7 @@ export function HomeScreen({ navigation }: Props) {
       await refreshQueueCount();
       if (result.synced > 0) {
         setSyncMessage(
-          `Synced ${result.synced} queued submission${
-            result.synced > 1 ? 's' : ''
-          }.`,
+          `Synced ${result.synced} queued item${result.synced > 1 ? 's' : ''}.`,
         );
       } else if (result.retained > 0) {
         setSyncMessage('Queue still pending. Will retry automatically.');
@@ -310,8 +313,8 @@ export function HomeScreen({ navigation }: Props) {
             <HomeTile
               icon={<FileText color="#475569" size={26} strokeWidth={2} />}
               title="Saved drafts"
-              subtitle="On this device"
-              accessibilityLabel="Saved drafts on this device"
+              subtitle="Server + offline queue"
+              accessibilityLabel="Saved drafts"
               onPress={() => navigation.navigate('Drafts')}
             />
           </View>
@@ -321,7 +324,10 @@ export function HomeScreen({ navigation }: Props) {
           <Card className="mb-3 border-amber-300/90 bg-amber-50 py-2">
             <CardContent className="py-2">
               <Text className="text-xs font-semibold text-amber-900">
-                {queuedCount} queued — syncs when online.
+                {queuedCount} offline {queuedCount === 1 ? 'item' : 'items'} waiting to sync.
+              </Text>
+              <Text className="mt-1 text-[11px] leading-4 text-amber-800/90">
+                Submissions and drafts saved while offline upload automatically when you are online.
               </Text>
             </CardContent>
           </Card>
@@ -336,13 +342,27 @@ export function HomeScreen({ navigation }: Props) {
               {queuedItems.map((item, idx) => (
                 <View key={item.id}>
                   {idx > 0 ? <Separator /> : null}
-                  <View className="flex-row items-center justify-between py-2.5">
-                    <Text className="font-semibold text-foreground">
-                      Water log
+                  <View className="gap-0.5 py-2.5">
+                    <View className="flex-row items-center justify-between gap-2">
+                      <Text className="shrink font-semibold text-foreground">
+                        {getQueueTypeLabel(item.type)}
+                      </Text>
+                      <Text className="text-muted-foreground text-xs">
+                        {formatPakistanDateTimeMedium(item.createdAt)}
+                      </Text>
+                    </View>
+                    <Text className="text-muted-foreground text-[11px]" numberOfLines={2}>
+                      {formatQueueItemLocation(item)}
                     </Text>
-                    <Text className="text-muted-foreground text-xs">
-                      {formatPakistanDateTimeMedium(item.createdAt)}
-                    </Text>
+                    {isDraftQueueItem(item) ? (
+                      <Text className="text-[10px] font-medium text-amber-800">
+                        Offline draft — pending sync
+                      </Text>
+                    ) : (
+                      <Text className="text-[10px] font-medium text-amber-800">
+                        Offline submission — pending sync
+                      </Text>
+                    )}
                   </View>
                 </View>
               ))}

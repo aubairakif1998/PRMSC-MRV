@@ -68,6 +68,9 @@ type DetailResponse = {
     pump_start_time?: string | null;
     pump_end_time?: string | null;
     pump_operating_hours?: number | null;
+    meter_reading_start?: number | null;
+    meter_reading_end?: number | null;
+    previous_meter_reading_end?: number | null;
     total_water_pumped?: number | null;
     bulk_meter_image_url?: string | null;
     signed?: boolean | null;
@@ -371,7 +374,7 @@ export default function WaterSubmissionDetailsPage() {
               <CardHeader className="border-b border-border/60">
                 <CardTitle className="text-base">Daily log</CardTitle>
                 <CardDescription>
-                  Period: {kv(record?.month)}/{kv(record?.year)} · Pump hours & water pumped
+                  Period: {kv(record?.month)}/{kv(record?.year)} · Pump hours & meter readings
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 pt-6 md:grid-cols-3">
@@ -395,12 +398,36 @@ export default function WaterSubmissionDetailsPage() {
                     {fmt2(record?.pump_operating_hours)}
                   </p>
                 </div>
-                <div className="space-y-1 rounded-xl border border-border/70 bg-card p-4 md:col-span-2">
+                <div className="space-y-1 rounded-xl border border-border/70 bg-card p-4">
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Total water pumped
+                    Previous meter reading
                   </p>
                   <p className="text-base font-semibold tabular-nums">
-                    {kv(record?.total_water_pumped)}
+                    {fmt2(record?.previous_meter_reading_end)}
+                  </p>
+                </div>
+                <div className="space-y-1 rounded-xl border border-border/70 bg-card p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Initial / baseline reading
+                  </p>
+                  <p className="text-base font-semibold tabular-nums">
+                    {fmt2(record?.meter_reading_start)}
+                  </p>
+                </div>
+                <div className="space-y-1 rounded-xl border border-border/70 bg-card p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Meter reading at pump stop
+                  </p>
+                  <p className="text-base font-semibold tabular-nums">
+                    {fmt2(record?.meter_reading_end)}
+                  </p>
+                </div>
+                <div className="space-y-1 rounded-xl border border-border/70 bg-card p-4 md:col-span-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Water pumped this interval (m³)
+                  </p>
+                  <p className="text-base font-semibold tabular-nums">
+                    {fmt2(record?.total_water_pumped)}
                   </p>
                 </div>
                 <div className="space-y-1 rounded-xl border border-border/70 bg-card p-4">

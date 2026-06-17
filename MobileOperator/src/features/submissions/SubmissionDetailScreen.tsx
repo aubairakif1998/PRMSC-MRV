@@ -212,7 +212,8 @@ export function SubmissionDetailScreen({ route }: Props) {
   const statusStr = String(sub.status ?? '—');
   const canEditResubmit = statusStr.toLowerCase() === 'reverted_back';
 
-  const [totalWater, setTotalWater] = useState('');
+  const [meterReadingStart, setMeterReadingStart] = useState('');
+  const [meterReadingEnd, setMeterReadingEnd] = useState('');
   const [pumpStart, setPumpStart] = useState('');
   const [pumpEnd, setPumpEnd] = useState('');
   const [asset, setAsset] = useState<EvidenceAsset | null>(null);
@@ -224,8 +225,19 @@ export function SubmissionDetailScreen({ route }: Props) {
 
   useEffect(() => {
     if (!canEditResubmit) return;
-    const tw = record.total_water_pumped;
-    setTotalWater(tw != null && String(tw) !== '' ? String(tw) : '');
+    const endReading =
+      record.meter_reading_end != null
+        ? record.meter_reading_end
+        : record.total_water_pumped;
+    setMeterReadingEnd(
+      endReading != null && String(endReading) !== '' ? String(endReading) : '',
+    );
+    const startReading = record.meter_reading_start;
+    setMeterReadingStart(
+      startReading != null && String(startReading) !== ''
+        ? String(startReading)
+        : '',
+    );
     const pst = record.pump_start_time;
     const pet = record.pump_end_time;
     setPumpStart(typeof pst === 'string' && pst.trim() ? pst.trim() : '');
@@ -289,8 +301,36 @@ export function SubmissionDetailScreen({ route }: Props) {
       );
       return;
     }
-    if (!isValidNumberInput(totalWater)) {
-      RNAlert.alert('Validation', 'Total water pumped must be numeric.');
+    if (!isValidNumberInput(meterReadingEnd)) {
+      RNAlert.alert('Validation', 'Meter reading at pump stop must be numeric.');
+      return;
+    }
+    const endVal = Number(meterReadingEnd);
+    const prevSubmitted = record.previous_meter_reading_end;
+    const prevNum =
+      prevSubmitted != null && String(prevSubmitted).trim() !== ''
+        ? Number(prevSubmitted)
+        : null;
+    const startNum = meterReadingStart.trim()
+      ? Number(meterReadingStart)
+      : null;
+    const base =
+      prevNum != null && Number.isFinite(prevNum)
+        ? prevNum
+        : startNum != null && Number.isFinite(startNum)
+          ? startNum
+          : null;
+    if (base != null && Number.isFinite(base) && endVal <= base) {
+      const fmt = (n: number) =>
+        new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(n);
+      const label =
+        prevNum != null && Number.isFinite(prevNum)
+          ? 'last submitted pump-stop reading'
+          : 'initial reading before pump start';
+      RNAlert.alert(
+        'Invalid meter reading',
+        `Meter reading at pump stop (${fmt(endVal)} m³) must be greater than the ${label} (${fmt(base)} m³). The meter increases as water is pumped.`,
+      );
       return;
     }
     if (!pumpStart.trim() || !pumpEnd.trim()) {
@@ -327,7 +367,10 @@ export function SubmissionDetailScreen({ route }: Props) {
         tehsil,
         village,
         settlement: settlement || undefined,
-        totalWaterPumping: Number(totalWater),
+        meterReadingEnd: Number(meterReadingEnd),
+        meterReadingStart: meterReadingStart.trim()
+          ? Number(meterReadingStart)
+          : null,
         pumpStartTime: normalizeTo24hWithSeconds(pumpStart),
         pumpEndTime: normalizeTo24hWithSeconds(pumpEnd),
       };
@@ -416,21 +459,34 @@ export function SubmissionDetailScreen({ route }: Props) {
           <CardHeader>
             <CardTitle className="text-base">Edit & resubmit</CardTitle>
             <CardDescription>
-              Update pump start/end time, total water pumped and meter image,
-              then resubmit.
+              Update pump start/end time, meter readings and meter image, then
+              resubmit.
             </CardDescription>
           </CardHeader>
           <Separator />
           <CardContent className="gap-4 pt-4">
             <View className="gap-2">
               <Text className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Total water pumped (m³)
+                Initial meter reading (m³, if first log)
               </Text>
               <TextInput
-                value={totalWater}
-                onChangeText={v => setTotalWater(sanitizeDecimalInput(v))}
+                value={meterReadingStart}
+                onChangeText={v => setMeterReadingStart(sanitizeDecimalInput(v))}
                 keyboardType="decimal-pad"
-                placeholder="e.g. 120.5"
+                placeholder="Only for first log on system"
+                style={editStyles.input}
+              />
+            </View>
+
+            <View className="gap-2">
+              <Text className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Meter reading at pump stop (m³)
+              </Text>
+              <TextInput
+                value={meterReadingEnd}
+                onChangeText={v => setMeterReadingEnd(sanitizeDecimalInput(v))}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 54381"
                 style={editStyles.input}
               />
             </View>
@@ -548,7 +604,19 @@ export function SubmissionDetailScreen({ route }: Props) {
         <CardContent className="gap-4 pt-4">
           <>
             <DetailRow
-              label="Total water pumped (m³)"
+              label="Previous meter reading (m³)"
+              value={fmt(record.previous_meter_reading_end)}
+            />
+            <DetailRow
+              label="Initial / baseline reading (m³)"
+              value={fmt(record.meter_reading_start)}
+            />
+            <DetailRow
+              label="Meter reading at pump stop (m³)"
+              value={fmt(record.meter_reading_end)}
+            />
+            <DetailRow
+              label="Water pumped this interval (m³)"
               value={fmt(record.total_water_pumped)}
             />
             <EvidenceImageBlock

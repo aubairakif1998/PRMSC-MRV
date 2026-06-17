@@ -2,7 +2,7 @@ import NetInfo from '@react-native-community/netinfo'
 
 import { STORAGE_KEYS } from '../storage/keys'
 import { getJson, setJson } from '../storage/jsonStorage'
-import type { QueueItem } from '../types/operator'
+import type { QueueItem, WaterLogInput } from '../types/operator'
 import { saveWaterSupplyData, saveWaterSupplyDraft, uploadEvidenceFile } from '../api/operator'
 import { nowIsoTimestamp } from '../utils/pakistanTime'
 
@@ -20,6 +20,88 @@ type QueueFailureRecord = QueueItem & {
 
 function normalizePart(value: string | undefined): string {
   return (value ?? '').trim().toLowerCase()
+}
+
+/** Same facility + calendar day, regardless of queue item type. */
+export function buildPeriodKey(payload: WaterLogInput): string {
+  const { year, month, day, tehsil, village, settlement } = payload
+  return [
+    String(year),
+    String(month),
+    String(day),
+    normalizePart(tehsil),
+    normalizePart(village),
+    normalizePart(settlement),
+  ].join('|')
+}
+
+export type QueueIntent = 'submit' | 'draft'
+
+export type QueueConflict = {
+  existing: QueueItem
+  title: string
+  message: string
+}
+
+export function findQueueConflict(
+  queue: QueueItem[],
+  payload: WaterLogInput,
+  intent: QueueIntent,
+): QueueConflict | null {
+  const periodKey = buildPeriodKey(payload)
+  const matches = queue.filter(
+    item => buildPeriodKey(item.payload) === periodKey,
+  )
+  if (!matches.length) return null
+
+  const submission = matches.find(item => item.type === 'water')
+  const draft = matches.find(item => item.type === 'water_draft')
+
+  if (intent === 'submit') {
+    if (submission) {
+      return {
+        existing: submission,
+        title: 'Submission already queued',
+        message:
+          'A water log for this facility and date is already waiting to sync. Review the sync queue on Home or My Submissions, or wait until it uploads.',
+      }
+    }
+    if (draft) {
+      return {
+        existing: draft,
+        title: 'Draft already queued',
+        message:
+          'An offline draft for this facility and date is already in the sync queue. Wait for it to upload before submitting a new log.',
+      }
+    }
+    return null
+  }
+
+  if (draft) {
+    return {
+      existing: draft,
+      title: 'Draft already queued',
+      message:
+        'A draft for this facility and date is already queued offline. It will save to the server when you are back online.',
+    }
+  }
+  if (submission) {
+    return {
+      existing: submission,
+      title: 'Submission already queued',
+      message:
+        'A water log submission for this facility and date is already waiting to sync. Wait for it to upload before saving another draft.',
+    }
+  }
+  return null
+}
+
+export function findQueuedForPeriod(
+  queue: QueueItem[],
+  payload: WaterLogInput,
+): QueueItem | undefined {
+  const periodKey = buildPeriodKey(payload)
+  return queue.find(item => buildPeriodKey(item.payload) === periodKey)
 }
 
 export function buildQueueKey(item: QueueItem): string {

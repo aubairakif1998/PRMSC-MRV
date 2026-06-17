@@ -594,7 +594,7 @@ export default function TubewellSubmissionsHub() {
                         <TableHead>Last edited</TableHead>
                         <TableHead className="text-right">Pump hrs</TableHead>
                         <TableHead className="text-right">
-                          Water pumped
+                          Interval pumped (m³)
                         </TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="sticky right-0 z-20 bg-card text-right shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.15)]">

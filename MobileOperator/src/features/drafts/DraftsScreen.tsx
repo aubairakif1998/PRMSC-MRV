@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatPakistanDateTimeMedium } from '../../utils/pakistanTime';
 import { Alert, FlatList, Image, RefreshControl, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { Button } from '../../components/ui/button';
@@ -18,6 +19,12 @@ import {
   getWaterDrafts,
   type WaterDraftSummary,
 } from '../../api/operator';
+import { getQueue } from '../../offline/queue';
+import {
+  formatQueueItemLocation,
+  getQueueTypeLabel,
+} from '../../offline/queueDisplay';
+import type { QueueItem } from '../../types/operator';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Drafts'>;
@@ -57,10 +64,11 @@ export function DraftsScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
+  const [queuedDrafts, setQueuedDrafts] = useState<QueueItem[]>([]);
 
   const load = useCallback(async () => {
     try {
-      const water = await getWaterDrafts();
+      const [water, queue] = await Promise.all([getWaterDrafts(), getQueue()]);
       const merged: DraftItem[] = water
         .map(d => ({ ...d, section: 'water' as const }))
         .sort((a, b) => {
@@ -69,6 +77,7 @@ export function DraftsScreen({ navigation }: Props) {
           return aa < bb ? 1 : -1;
         });
       setDrafts(merged);
+      setQueuedDrafts(queue.filter(item => item.type === 'water_draft'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -78,6 +87,12 @@ export function DraftsScreen({ navigation }: Props) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   const onDelete = (item: DraftItem) => {
     Alert.alert('Delete draft', 'Are you sure you want to delete this draft?', [
@@ -114,10 +129,57 @@ export function DraftsScreen({ navigation }: Props) {
         }
         contentContainerStyle={LIST_CONTENT_STYLE}
         ListEmptyComponent={
-          <Text className="text-muted-foreground mt-10 px-4 text-center">
-            No drafts yet. From Water log, tap Save Draft anytime (saved to the server
-            so it’s available across devices).
-          </Text>
+          !queuedDrafts.length ? (
+            <Text className="text-muted-foreground mt-10 px-4 text-center">
+              No server drafts yet. From Water log, tap Save Draft anytime (saved to the server
+              so it’s available across devices).
+            </Text>
+          ) : null
+        }
+        ListHeaderComponent={
+          queuedDrafts.length ? (
+            <View className="mb-3 gap-2">
+              <Text className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                Offline queue
+              </Text>
+              {queuedDrafts.map(item => (
+                <Card
+                  key={item.id}
+                  className="overflow-hidden border-amber-300/80 bg-amber-50/80 py-3 dark:bg-amber-950/20"
+                >
+                  <CardHeader className="pb-2">
+                    <View className="flex-row items-start justify-between gap-3">
+                      <View className="min-w-0 flex-1">
+                        <CardTitle className="text-[15px] font-extrabold text-amber-950 dark:text-amber-100">
+                          {getQueueTypeLabel(item.type)}
+                        </CardTitle>
+                        <Text
+                          className="text-amber-900/90 mt-1 text-xs dark:text-amber-200/90"
+                          numberOfLines={2}
+                        >
+                          {formatQueueItemLocation(item)}
+                        </Text>
+                        <Text className="text-amber-800/80 mt-1 text-[11px] dark:text-amber-300/80">
+                          Queued {formatPakistanDateTimeMedium(item.createdAt)} · syncs when online
+                        </Text>
+                      </View>
+                      <Badge variant="outline" className="border-amber-400/70 bg-amber-100/80">
+                        Pending
+                      </Badge>
+                    </View>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <Text className="text-xs leading-5 text-amber-900/90 dark:text-amber-200/90">
+                      Saved on this device while offline. It will upload automatically when you are back online. You cannot edit queued drafts here.
+                    </Text>
+                  </CardContent>
+                </Card>
+              ))}
+              <Text className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground mt-2">
+                Saved on server
+              </Text>
+            </View>
+          ) : null
         }
         renderItem={({ item }) => {
           const meta = prettyMeta(item);

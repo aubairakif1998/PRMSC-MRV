@@ -10,7 +10,11 @@ export type WaterLogInput = {
   settlement?: string
   /** Mirrors assigned system setting where bulk meter is not installed. */
   noBulkMeterInstalled?: boolean
-  /** Reading total from the water meter (m³). Maps to API `total_water_pumped`. */
+  /** Cumulative bulk-meter reading before pump start (first log only). */
+  meterReadingStart?: number | null
+  /** Cumulative bulk-meter reading at pump stop. */
+  meterReadingEnd?: number | null
+  /** @deprecated Use meterReadingEnd — kept for queued offline payloads. */
   totalWaterPumping?: number | null
   /**
    * Maps to API `monthlyData[].pump_start_time` / `pump_end_time`.

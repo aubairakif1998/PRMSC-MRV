@@ -40,6 +40,8 @@ import TubewellSubmissionsHub from "./pages/tehsil/submissions/TubewellSubmissio
 import WaterSubmissionDetailsPage from "./pages/tehsil/submissions/WaterSubmissionDetailsPage";
 
 import ExecutiveDashboard from "./pages/executive/ExecutiveDashboard";
+import ExecutiveWaterAnalysis from "./pages/executive/ExecutiveWaterAnalysis";
+import ExecutiveSolarAnalysis from "./pages/executive/ExecutiveSolarAnalysis";
 import TehsilManagerDashboard from "./pages/tehsil/dashboard/TehsilManagerDashboard";
 import LoggingCompliance from "./pages/tehsil/logging/LoggingCompliance";
 import SolarLoggingCompliancePage from "./pages/tehsil/logging/SolarLoggingCompliancePage";
@@ -171,6 +173,22 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={[...EXECUTIVE_ROLES]}>
                   <ExecutiveDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/hq/water"
+              element={
+                <ProtectedRoute allowedRoles={[...EXECUTIVE_ROLES]}>
+                  <ExecutiveWaterAnalysis />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/hq/solar"
+              element={
+                <ProtectedRoute allowedRoles={[...EXECUTIVE_ROLES]}>
+                  <ExecutiveSolarAnalysis />
                 </ProtectedRoute>
               }
             />

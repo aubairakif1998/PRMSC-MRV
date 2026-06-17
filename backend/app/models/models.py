@@ -282,6 +282,9 @@ class WaterEnergyLoggingDaily(db.Model):
     pump_end_time = db.Column(Time, nullable=True)
     pump_operating_hours = db.Column(db.Float)
     total_water_pumped = db.Column(db.Float)
+    # Cumulative bulk-meter readings; `total_water_pumped` stores interval m³ (end − start/previous).
+    meter_reading_start = db.Column(db.Float)
+    meter_reading_end = db.Column(db.Float)
     bulk_meter_image_url = db.Column(db.Text)
     signed = db.Column(db.Boolean, nullable=False, default=False)
     # Snapshot of operator signature (SVG) at time of submission.

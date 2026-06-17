@@ -56,6 +56,12 @@ from app.services.tehsil_access import (
     assigned_water_system_id_set,
 )
 from app.utils.water_submission_detail import build_water_submission_detail_response
+from app.utils.water_meter_volume import (
+    apply_bulk_meter_fields,
+    count_meter_chain_logs,
+    get_latest_submitted_meter_reading_end,
+    MeterReadingOrderError,
+)
 from app.utils.in_app_notifications import (
     get_notifications_response,
     mark_all_notifications_read_response,
@@ -67,6 +73,14 @@ from datetime import date, datetime
 tubewell_operator_bp = Blueprint("tubewell_operator", __name__)
 
 
+def _bulk_meter_error_response(exc: Exception):
+    if isinstance(exc, MeterReadingOrderError):
+        return jsonify({"error": str(exc), "code": exc.code}), 400
+    if isinstance(exc, ValueError):
+        return jsonify({"error": str(exc)}), 400
+    raise exc
+
+
 def _apply_water_log_year_filter(query, year: int | None):
     if year is None:
         return query
@@ -74,6 +88,41 @@ def _apply_water_log_year_filter(query, year: int | None):
         WaterEnergyLoggingDaily.log_date >= date(year, 1, 1),
         WaterEnergyLoggingDaily.log_date < date(year + 1, 1, 1),
     )
+
+
+def _find_water_system_by_location(ct: str, village: str, settlement: str | None):
+    if settlement:
+        return WaterSystem.query.filter_by(
+            tehsil=ct, village=village, settlement=settlement
+        ).first()
+    return (
+        WaterSystem.query.filter_by(tehsil=ct, village=village)
+        .filter(
+            or_(
+                WaterSystem.settlement.is_(None),
+                WaterSystem.settlement == "",
+            )
+        )
+        .first()
+    )
+
+
+def _water_log_to_json(record: WaterEnergyLoggingDaily) -> dict:
+    return {
+        "id": str(record.id),
+        "year": record.log_date.year if record.log_date else None,
+        "month": record.log_date.month if record.log_date else None,
+        "day": record.log_date.day if record.log_date else None,
+        "pump_start_time": time_to_json(record.pump_start_time),
+        "pump_end_time": time_to_json(record.pump_end_time),
+        "pump_operating_hours": record.pump_operating_hours,
+        "meter_reading_start": record.meter_reading_start,
+        "meter_reading_end": record.meter_reading_end,
+        "total_water_pumped": record.total_water_pumped,
+        "bulk_meter_image_url": record.bulk_meter_image_url,
+        "status": record.status,
+        "remarks": record.remarks,
+    }
 
 
 def _signature_payload_ok(value: str) -> bool:
@@ -594,6 +643,87 @@ def get_water_system_config():
 
 
 
+@tubewell_operator_bp.route('/water-meter-context', methods=['GET'])
+@jwt_required()
+@min_role_required('USER')
+def get_water_meter_context():
+    """Latest submitted meter_reading_end (max cumulative pump-stop) for operator validation."""
+    user = UserService.get_user_by_id(get_jwt_identity())
+    tehsil = request.args.get('tehsil')
+    village = request.args.get('village')
+    settlement = request.args.get('settlement', '')
+    system_id = request.args.get('system_id')
+    exclude_record_id = (request.args.get('exclude_record_id') or '').strip() or None
+
+    log_date_raw = (request.args.get('log_date') or '').strip()
+    pump_end_raw = (request.args.get('pump_end_time') or '').strip()
+
+    system = None
+    if system_id:
+        system = WaterSystem.query.get(system_id)
+    elif tehsil and village:
+        ct = canonical_tehsil(tehsil)
+        if not ct:
+            return jsonify({"message": "Invalid tehsil"}), 400
+        system = _find_water_system_by_location(ct, village, settlement or None)
+    else:
+        return jsonify({"message": "system_id or tehsil+village required"}), 400
+
+    if not system:
+        return jsonify({"message": "Water system not found"}), 404
+
+    try:
+        assert_user_may_view_or_log_water_system(user, system)
+    except TehsilAccessDenied:
+        return jsonify({"message": "Access denied for this water system"}), 403
+
+    bulk_meter = getattr(system, "bulk_meter_installed", True) is not False
+    if not bulk_meter:
+        return jsonify(
+            {
+                "bulk_meter_installed": False,
+                "previous_meter_reading_end": None,
+                "is_first_bulk_meter_log": False,
+                "prior_log_count": 0,
+            }
+        ), 200
+
+    log_d = date.today()
+    end_time = parse_time_of_day("23:59:59") or parse_time_of_day("23:59")
+    if log_date_raw:
+        try:
+            log_d = datetime.strptime(log_date_raw, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"message": "Invalid log_date; use YYYY-MM-DD"}), 400
+    if pump_end_raw:
+        parsed_end = parse_time_of_day(pump_end_raw)
+        if parsed_end is None:
+            return jsonify({"message": "Invalid pump_end_time"}), 400
+        end_time = parsed_end
+
+    prev_end = get_latest_submitted_meter_reading_end(
+        str(system.id),
+        exclude_record_id=exclude_record_id,
+    )
+    prior_count = count_meter_chain_logs(
+        str(system.id),
+        exclude_record_id=exclude_record_id,
+    )
+
+    return jsonify(
+        {
+            "bulk_meter_installed": True,
+            "previous_meter_reading_end": prev_end,
+            "has_submitted_meter_end": prev_end is not None,
+            "is_first_bulk_meter_log": prior_count == 0,
+            "prior_log_count": prior_count,
+            "water_system_id": str(system.id),
+        }
+    ), 200
+
+
+
+
 @tubewell_operator_bp.route('/water-data/drafts', methods=['GET'])
 @jwt_required()
 @min_role_required('USER')
@@ -670,6 +800,8 @@ def get_water_draft(record_id):
             "pump_start_time": time_to_json(record.pump_start_time),
             "pump_end_time": time_to_json(record.pump_end_time),
             "pump_operating_hours": record.pump_operating_hours,
+            "meter_reading_start": record.meter_reading_start,
+            "meter_reading_end": record.meter_reading_end,
             "total_water_pumped": record.total_water_pumped,
             "bulk_meter_image_url": record.bulk_meter_image_url,
             "signed": record.signed,
@@ -712,8 +844,37 @@ def update_water_draft(record_id):
     data = request.get_json()
 
     apply_pump_time_fields_from_payload(record, data)
-    if "total_water_pumped" in data:
-        record.total_water_pumped = data["total_water_pumped"]
+    no_bulk_meter = getattr(system, "bulk_meter_installed", True) is False
+    try:
+        meter_end = _coerce_optional_float(data.get("meter_reading_end"))
+    except ValueError as ve:
+        return jsonify({"error": f"Invalid meter_reading_end: {ve}"}), 400
+    try:
+        meter_start = _coerce_optional_float(data.get("meter_reading_start"))
+    except ValueError as ve:
+        return jsonify({"error": f"Invalid meter_reading_start: {ve}"}), 400
+    try:
+        legacy_total = _coerce_optional_float(data.get("total_water_pumped"))
+    except ValueError as ve:
+        return jsonify({"error": f"Invalid total_water_pumped: {ve}"}), 400
+
+    if (
+        "meter_reading_end" in data
+        or "meter_reading_start" in data
+        or "total_water_pumped" in data
+    ):
+        try:
+            apply_bulk_meter_fields(
+                record,
+                water_system_id=str(system.id),
+                no_bulk_meter_installed=no_bulk_meter,
+                meter_reading_end=meter_end,
+                meter_reading_start=meter_start,
+                legacy_total_water_pumped=legacy_total,
+                exclude_record_id=str(record.id),
+            )
+        except (MeterReadingOrderError, ValueError) as ve:
+            return _bulk_meter_error_response(ve)
     if "year" in data or "month" in data or "day" in data:
         y = data.get("year", record.log_date.year if record.log_date else None)
         m = data.get("month", record.log_date.month if record.log_date else None)
@@ -789,6 +950,25 @@ def submit_water_draft(record_id):
         assert_user_may_view_or_log_water_system(u, system)
     except TehsilAccessDenied:
         return jsonify({'error': 'Access denied'}), 403
+
+    no_bulk_meter = getattr(system, "bulk_meter_installed", True) is False
+    if not no_bulk_meter:
+        if record.log_date is None or record.pump_end_time is None:
+            return jsonify(
+                {"error": "log_date and pump_end_time are required before submit"}
+            ), 400
+        try:
+            apply_bulk_meter_fields(
+                record,
+                water_system_id=str(system.id),
+                no_bulk_meter_installed=False,
+                meter_reading_end=record.meter_reading_end,
+                meter_reading_start=record.meter_reading_start,
+                legacy_total_water_pumped=record.total_water_pumped,
+                exclude_record_id=str(record.id),
+            )
+        except (MeterReadingOrderError, ValueError) as ve:
+            return _bulk_meter_error_response(ve)
 
     record.status = SUBMISSION_STATUS_SUBMITTED
     record.signed = True
@@ -887,43 +1067,48 @@ def delete_water_draft(record_id):
 @tubewell_user_required
 def get_water_supply_data():
     """
-    Get monthly water supply data by location.
-    Query params: tehsil, village, settlement, year
+    Get monthly water supply data by location or water system id.
+    Query params: system_id OR (tehsil, village, settlement), year
     """
     user = UserService.get_user_by_id(get_jwt_identity())
     tehsil = request.args.get('tehsil')
     village = request.args.get('village')
     settlement = request.args.get('settlement', '')
+    system_id = (request.args.get('system_id') or '').strip() or None
     year = request.args.get('year', type=int)
 
-    if not tehsil or not village:
-        return jsonify({"message": "Tehsil and village are required"}), 400
-
-    ct = canonical_tehsil(tehsil)
-    if not ct:
-        return jsonify({"message": "Invalid tehsil"}), 400
-    try:
-        assert_user_may_access_tehsil(user, ct)
-    except TehsilAccessDenied:
-        return jsonify({"message": "Access denied for this tehsil"}), 403
-
-    if settlement:
-        system = WaterSystem.query.filter_by(
-            tehsil=ct,
-            village=village,
-            settlement=settlement
-        ).first()
+    system = None
+    if system_id:
+        system = WaterSystem.query.get(system_id)
     else:
-        system = WaterSystem.query.filter_by(
-            tehsil=ct,
-            village=village
-        ).filter(
-            or_(
-                WaterSystem.settlement.is_(None),
-                WaterSystem.settlement == "",
-            )
-        ).first()
-    
+        if not tehsil or not village:
+            return jsonify({"message": "system_id or tehsil+village is required"}), 400
+
+        ct = canonical_tehsil(tehsil)
+        if not ct:
+            return jsonify({"message": "Invalid tehsil"}), 400
+        try:
+            assert_user_may_access_tehsil(user, ct)
+        except TehsilAccessDenied:
+            return jsonify({"message": "Access denied for this tehsil"}), 403
+
+        if settlement:
+            system = WaterSystem.query.filter_by(
+                tehsil=ct,
+                village=village,
+                settlement=settlement
+            ).first()
+        else:
+            system = WaterSystem.query.filter_by(
+                tehsil=ct,
+                village=village
+            ).filter(
+                or_(
+                    WaterSystem.settlement.is_(None),
+                    WaterSystem.settlement == "",
+                )
+            ).first()
+
     if not system:
         return jsonify([]), 200
 
@@ -939,24 +1124,7 @@ def get_water_supply_data():
 
     records = query.order_by(WaterEnergyLoggingDaily.log_date).all()
 
-    return jsonify(
-        [
-            {
-                "id": str(r.id),
-                "year": r.log_date.year if r.log_date else None,
-                "month": r.log_date.month if r.log_date else None,
-                "day": r.log_date.day if r.log_date else None,
-                "pump_start_time": time_to_json(r.pump_start_time),
-                "pump_end_time": time_to_json(r.pump_end_time),
-                "pump_operating_hours": r.pump_operating_hours,
-                "total_water_pumped": r.total_water_pumped,
-                "bulk_meter_image_url": r.bulk_meter_image_url,
-                "status": r.status,
-                "remarks": r.remarks,
-            }
-            for r in records
-        ]
-    ), 200
+    return jsonify([_water_log_to_json(r) for r in records]), 200
 
 
 
@@ -1078,6 +1246,12 @@ def save_water_supply_data():
                     pump_hours = _coerce_optional_float(
                         month_record.get("pump_operating_hours")
                     )
+                    meter_end = _coerce_optional_float(
+                        month_record.get("meter_reading_end")
+                    )
+                    meter_start = _coerce_optional_float(
+                        month_record.get("meter_reading_start")
+                    )
                     total_water = _coerce_optional_float(
                         month_record.get("total_water_pumped")
                     )
@@ -1133,8 +1307,9 @@ def save_water_supply_data():
                     continue
 
                 if no_bulk_meter_installed:
-                    # No-bulk-meter systems are logged by operating interval only.
                     total_water = None
+                    meter_end = None
+                    meter_start = None
 
                 # Allow multiple logs/day, but reject duplicate interval.
                 duplicate_interval = WaterEnergyLoggingDaily.query.filter_by(
@@ -1152,7 +1327,6 @@ def save_water_supply_data():
                 new_record = WaterEnergyLoggingDaily(
                     water_system_id=system.id,
                     log_date=log_d,
-                    total_water_pumped=total_water,
                     status=status,
                     bulk_meter_image_url=None if no_bulk_meter_installed else image_url,
                     signed=status == SUBMISSION_STATUS_SUBMITTED,
@@ -1166,6 +1340,18 @@ def save_water_supply_data():
                     or new_record.pump_end_time is None
                 ) and pump_hours is not None:
                     new_record.pump_operating_hours = pump_hours
+                try:
+                    apply_bulk_meter_fields(
+                        new_record,
+                        water_system_id=str(system.id),
+                        no_bulk_meter_installed=no_bulk_meter_installed,
+                        meter_reading_end=meter_end,
+                        meter_reading_start=meter_start,
+                        legacy_total_water_pumped=total_water,
+                    )
+                except (MeterReadingOrderError, ValueError) as ve:
+                    errors.append(f"Row {i+1}: {ve}")
+                    continue
                 db.session.add(new_record)
                 db.session.flush()
                 saved_record_ids.append(str(new_record.id))
@@ -1198,7 +1384,8 @@ def save_water_supply_data():
                             f"New Monthly Water Report ({month}/{year}) submitted by {current_user.name}.\n"
                             f"Location: {system.tehsil}, {system.village} {system.settlement or ''}\n"
                             f"Pump Operating Hours: {rec.pump_operating_hours or 'N/A'}\n"
-                            f"Total Water Pumped: {total_water or 'N/A'}"
+                            f"Meter reading (stop): {rec.meter_reading_end or 'N/A'}\n"
+                            f"Water pumped this interval: {rec.total_water_pumped or 'N/A'} m³"
                         )
                         notify_analysts(
                             'New Detailed Water Submission',

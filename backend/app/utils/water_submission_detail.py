@@ -11,6 +11,7 @@ from app.models.models import (
     WaterSystem,
 )
 from app.utils.operator_helpers import meter_to_dict
+from app.utils.water_meter_volume import get_latest_submitted_meter_reading_end
 
 
 def build_water_submission_detail_response(submission: Submission) -> dict:
@@ -52,6 +53,16 @@ def build_water_submission_detail_response(submission: Submission) -> dict:
             if record.pump_end_time
             else None,
             "pump_operating_hours": record.pump_operating_hours,
+            "meter_reading_start": record.meter_reading_start,
+            "meter_reading_end": record.meter_reading_end,
+            "previous_meter_reading_end": (
+                get_latest_submitted_meter_reading_end(
+                    str(record.water_system_id),
+                    exclude_record_id=str(record.id),
+                )
+                if record.water_system_id
+                else None
+            ),
             "total_water_pumped": record.total_water_pumped,
             "bulk_meter_image_url": record.bulk_meter_image_url,
             "signed": getattr(record, "signed", False),

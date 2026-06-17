@@ -4,7 +4,9 @@ import {
   getDashboardProgramSummary as getDashboardProgramSummaryService,
   getDashboardPumpHours as getDashboardPumpHoursService,
   getDashboardSolarGeneration as getDashboardSolarGenerationService,
+  getDashboardSolarSystemsDetail as getDashboardSolarSystemsDetailService,
   getDashboardWaterSupplied as getDashboardWaterSuppliedService,
+  getDashboardWaterSystemsDetail as getDashboardWaterSystemsDetailService,
   getWaterAnomalies as getWaterAnomaliesService,
 } from "../services/tehsilManagerOperatorService";
 import type { QueryFilters } from "../services/types";
@@ -32,6 +34,12 @@ export function useProgramDashboardApi() {
     mutationFn: (filters: QueryFilters) =>
       getDashboardGridImportService(filters),
   });
+  const getDashboardWaterSystemsDetailMutation = useMutation({
+    mutationFn: (filters: QueryFilters) => getDashboardWaterSystemsDetailService(filters),
+  });
+  const getDashboardSolarSystemsDetailMutation = useMutation({
+    mutationFn: (filters: QueryFilters) => getDashboardSolarSystemsDetailService(filters),
+  });
   const getWaterAnomaliesMutation = useMutation({
     mutationFn: (filters: QueryFilters) => getWaterAnomaliesService(filters),
   });
@@ -42,6 +50,8 @@ export function useProgramDashboardApi() {
     getDashboardPumpHours: getDashboardPumpHoursMutation.mutateAsync,
     getDashboardSolarGeneration: getDashboardSolarGenerationMutation.mutateAsync,
     getDashboardGridImport: getDashboardGridImportMutation.mutateAsync,
+    getDashboardWaterSystemsDetail: getDashboardWaterSystemsDetailMutation.mutateAsync,
+    getDashboardSolarSystemsDetail: getDashboardSolarSystemsDetailMutation.mutateAsync,
     getWaterAnomalies: getWaterAnomaliesMutation.mutateAsync,
   };
 }

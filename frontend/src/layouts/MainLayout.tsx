@@ -15,6 +15,7 @@ import {
   LogOut,
   Menu,
   Sun,
+  Table2,
   UserPlus,
   Users,
   User as UserIcon,
@@ -31,7 +32,7 @@ import {
   CollapsibleTrigger,
 } from "../components/ui/collapsible";
 import { Separator } from "../components/ui/separator";
-import { HQ_DASHBOARD, tehsilRoutes } from "../constants/routes";
+import { HQ_DASHBOARD, hqRoutes, tehsilRoutes } from "../constants/routes";
 import { accountRoutes } from "../constants/routes";
 import {
   canOnboardOperators,
@@ -71,12 +72,36 @@ const MainLayout = () => {
     const items: MenuItem[] = [];
 
     if (exec) {
-      items.push({
-        path: HQ_DASHBOARD,
-        icon: <BarChart3 className="size-4" />,
-        label: "Organization KPI",
-        end: true,
-      });
+      items.push(
+        {
+          path: HQ_DASHBOARD,
+          icon: <BarChart3 className="size-4" />,
+          label: "Organization KPI",
+          end: true,
+        },
+        {
+          icon: <Droplets className="size-4" />,
+          label: "Water",
+          children: [
+            {
+              path: hqRoutes.waterAnalysis,
+              icon: <Table2 className="size-4" />,
+              label: "Water analysis",
+            },
+          ],
+        },
+        {
+          icon: <Sun className="size-4" />,
+          label: "Solar",
+          children: [
+            {
+              path: hqRoutes.solarAnalysis,
+              icon: <Table2 className="size-4" />,
+              label: "Solar analysis",
+            },
+          ],
+        },
+      );
     }
 
     if (tehsilMgr) {

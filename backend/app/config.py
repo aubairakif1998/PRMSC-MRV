@@ -7,10 +7,16 @@ _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _load_env() -> None:
-    """Load .env then .env.production so production can use a dedicated file."""
-    load_dotenv(_BACKEND_ROOT / ".env")
+    """Load `.env`; load `.env.production` only when FLASK_ENV is production."""
+    # First pass: read `.env` without overriding any host-provided environment.
+    # Then, in non-production, allow `.env` to override so local edits take effect
+    # even if a shell already has variables exported.
+    load_dotenv(_BACKEND_ROOT / ".env", override=False)
+    flask_env = os.environ.get("FLASK_ENV", "development").strip().lower()
+    if flask_env != "production":
+        load_dotenv(_BACKEND_ROOT / ".env", override=True)
     prod = _BACKEND_ROOT / ".env.production"
-    if prod.is_file():
+    if flask_env == "production" and prod.is_file():
         load_dotenv(prod, override=True)
 
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MutableRefObject } from "react";
 import L from "leaflet";
 import {
   GeoJSON,
@@ -10,7 +11,7 @@ import {
   ZoomControl,
 } from "react-leaflet";
 import type { FeatureCollection } from "geojson";
-import { Droplets, Sun } from "lucide-react";
+import { Droplets, MapPin, Maximize2, Sun } from "lucide-react";
 
 import {
   Card,
@@ -21,6 +22,13 @@ import {
 } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
 import { getApiErrorMessage } from "../../lib/api-error";
 import { toast } from "sonner";
 import {
@@ -46,34 +54,33 @@ type GeoPoint = {
   village: string;
   latitude: number;
   longitude: number;
-  /** True when API had no lat/lng — pin is a stable placeholder inside Pakistan until coordinates are saved. */
   approximate?: boolean;
 };
 
-/** Same tehsil/village scope as Program Dashboard filters (and `/dashboard/program-summary`). */
 export type SystemsMapFilters = {
   tehsil: string;
   village: string;
 };
 
-/** [west, south], [east, north] in lng/lat — same as previous MapLibre bounds. */
 const PAKISTAN_VIEW_BOUNDS_LNGLAT: [[number, number], [number, number]] = [
   [60.45, 23.25],
   [78.05, 37.25],
 ];
 
-/** Leaflet maxBounds: [[south, west], [north, east]] in lat/lng */
 const MAP_MAX_BOUNDS_LEAFLET: L.LatLngBoundsExpression = [
-  // Keep zoom-out constrained to the Pakistan overview used in this dashboard.
   [22.5, 59.5],
   [38.0, 79.0],
 ];
 
-/** Esri World Street Map — not the OSM.org tile endpoint; good general-purpose basemap. */
+/** Esri World Street Map — executive dashboard basemap. */
 const ESRI_WORLD_STREET_TILES =
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}";
+const CARTO_LIGHT_TILES =
+  "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
 const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, HERE, Garmin, USGS, NGA, EPA, USDA';
+const CARTO_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
@@ -101,11 +108,10 @@ function normalizeListPayload(raw: unknown): unknown[] {
   return [];
 }
 
-/**
- * Stable fallback inside Pakistan when the registry has no coordinates yet (often solar).
- * Spread so multiple systems in one village don't stack on one pixel.
- */
-function approximateLatLng(seed: string, type: "water" | "solar"): { latitude: number; longitude: number } {
+function approximateLatLng(
+  seed: string,
+  type: "water" | "solar",
+): { latitude: number; longitude: number } {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) {
     h ^= seed.charCodeAt(i);
@@ -142,7 +148,6 @@ function createTeardropPinIcon(p: GeoPoint): L.DivIcon {
   });
 }
 
-/** Fit to markers when the filter returns points; otherwise Pakistan overview. */
 function MapViewBounds({
   points,
   ready,
@@ -195,17 +200,161 @@ function mapListQuery(filters: SystemsMapFilters): QueryFilters {
   };
 }
 
+function MapLegend({ compact }: { compact?: boolean | undefined }) {
+  return (
+    <div
+      className={`pointer-events-none absolute bottom-2 left-2 z-[500] flex flex-wrap gap-1.5 rounded-lg border border-border/70 bg-background/92 px-2 py-1.5 shadow-sm backdrop-blur-sm ${
+        compact ? "text-[10px]" : "text-xs"
+      }`}
+    >
+      <span className="flex items-center gap-1 font-medium text-foreground">
+        <span className="size-2 rounded-full bg-blue-600" />
+        Water
+      </span>
+      <span className="flex items-center gap-1 font-medium text-foreground">
+        <span className="size-2 rounded-full bg-amber-600" />
+        Solar
+      </span>
+      <span className="flex items-center gap-1 text-muted-foreground">
+        <span className="size-2 rounded-full border border-dashed border-slate-400 bg-transparent" />
+        Approx.
+      </span>
+    </div>
+  );
+}
+
+function SystemsMapCanvas({
+  mapRef,
+  points,
+  loading,
+  heightClass,
+  onReady,
+  scopeLabel,
+  compact,
+  lightBasemap,
+}: {
+  mapRef: MutableRefObject<L.Map | null>;
+  points: GeoPoint[];
+  loading: boolean;
+  heightClass: string;
+  onReady: () => void;
+  scopeLabel?: string | undefined;
+  compact?: boolean | undefined;
+  lightBasemap?: boolean | undefined;
+}) {
+  return (
+    <div
+      className={`relative w-full min-w-0 overflow-hidden rounded-xl border border-border/60 bg-gradient-to-b from-slate-50/80 to-muted/30 shadow-inner [&_.leaflet-container]:z-0 ${heightClass}`}
+    >
+      {scopeLabel ? (
+        <div className="pointer-events-none absolute left-2 top-2 z-[500] max-w-[calc(100%-4.5rem)] rounded-lg border border-border/60 bg-background/92 px-2.5 py-1.5 shadow-sm backdrop-blur-sm">
+          <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            <MapPin className="size-3 shrink-0" />
+            Active scope
+          </p>
+          <p className="truncate text-xs font-semibold text-foreground">
+            {scopeLabel}
+          </p>
+        </div>
+      ) : null}
+      {loading ? (
+        <div
+          className="absolute inset-0 z-[480] flex items-center justify-center bg-background/40 backdrop-blur-[1px]"
+          aria-live="polite"
+        >
+          <div className="rounded-lg border bg-background/95 px-3 py-2 text-xs font-medium text-muted-foreground shadow-sm">
+            Updating map…
+          </div>
+        </div>
+      ) : null}
+      <MapContainer
+        ref={mapRef}
+        center={[30.5, 69.5]}
+        zoom={5}
+        minZoom={5}
+        maxZoom={12}
+        maxBounds={MAP_MAX_BOUNDS_LEAFLET}
+        maxBoundsViscosity={1.0}
+        className={`w-full rounded-[inherit] ${heightClass}`}
+        scrollWheelZoom
+        whenReady={onReady}
+      >
+        <TileLayer
+          attribution={lightBasemap ? CARTO_ATTRIBUTION : TILE_ATTRIBUTION}
+          url={lightBasemap ? CARTO_LIGHT_TILES : ESRI_WORLD_STREET_TILES}
+        />
+        <ZoomControl position="bottomright" />
+        <MapViewBounds points={points} ready={!loading} />
+        <GeoJSON
+          data={pakistanOutline}
+          style={{
+            color: "#94a3b8",
+            weight: 1,
+            fillColor: "#64748b",
+            fillOpacity: 0.06,
+            opacity: 0.7,
+          }}
+        />
+        <GeoJSON
+          data={punjabPkBoundary}
+          style={{
+            color: "#047857",
+            weight: 2,
+            fillColor: "#10b981",
+            fillOpacity: 0.12,
+            opacity: 0.9,
+          }}
+        />
+        {points.map((p) => (
+          <Marker
+            key={p.id}
+            position={[p.latitude, p.longitude]}
+            icon={createTeardropPinIcon(p)}
+          >
+            <Popup>
+              <div className="text-sm">
+                <div className="font-semibold">{p.uid}</div>
+                <div className="text-muted-foreground">
+                  {[p.village, p.tehsil].filter(Boolean).join(" · ")}
+                </div>
+                {p.approximate ? (
+                  <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
+                    Approximate position — add GPS on the system record.
+                  </p>
+                ) : null}
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+      </MapContainer>
+      <MapLegend compact={compact} />
+    </div>
+  );
+}
+
 type SystemsMapCardProps = {
   mapFilters: SystemsMapFilters;
-  /** Same numbers as the Program Dashboard summary cards (scoped by tehsil/village). `null` while parent loads. */
   summaryCounts?: { water: number; solar: number } | null | undefined;
+  /** Shorter preview with expand-to-fullscreen option (COO dashboard). */
+  compact?: boolean;
+  /** Human-readable scope — shown on map and kept in sync with KPI filters. */
+  scopeLabel?: string | undefined;
+  /** Parent KPI reload in progress — badge counts stay on summary values. */
+  dataSyncing?: boolean;
 };
 
-export default function SystemsMapCard({ mapFilters, summaryCounts }: SystemsMapCardProps) {
+export default function SystemsMapCard({
+  mapFilters,
+  summaryCounts,
+  compact = false,
+  scopeLabel,
+  dataSyncing = false,
+}: SystemsMapCardProps) {
   const mapRef = useRef<L.Map | null>(null);
+  const expandedMapRef = useRef<L.Map | null>(null);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [points, setPoints] = useState<GeoPoint[]>([]);
-  /** Row counts from the last list API response (matches filter scope). */
   const [registryTotals, setRegistryTotals] = useState({ water: 0, solar: 0 });
 
   const load = useCallback(async () => {
@@ -217,18 +366,36 @@ export default function SystemsMapCard({ mapFilters, summaryCounts }: SystemsMap
         getSolarSystems(q),
       ]);
 
-      const waterRaw = waterResult.status === "fulfilled" ? waterResult.value : null;
-      const solarRaw = solarResult.status === "fulfilled" ? solarResult.value : null;
+      const waterRaw =
+        waterResult.status === "fulfilled" ? waterResult.value : null;
+      const solarRaw =
+        solarResult.status === "fulfilled" ? solarResult.value : null;
 
       if (waterResult.status === "rejected") {
-        toast.error(getApiErrorMessage(waterResult.reason, "Failed to load water systems for map"));
+        toast.error(
+          getApiErrorMessage(
+            waterResult.reason,
+            "Failed to load water systems for map",
+          ),
+        );
       }
       if (solarResult.status === "rejected") {
-        toast.error(getApiErrorMessage(solarResult.reason, "Failed to load solar systems for map"));
+        toast.error(
+          getApiErrorMessage(
+            solarResult.reason,
+            "Failed to load solar systems for map",
+          ),
+        );
       }
 
-      const water = waterRaw != null ? (normalizeListPayload(waterRaw) as WaterSystemRow[]) : [];
-      const solar = solarRaw != null ? (normalizeListPayload(solarRaw) as SolarSystemRow[]) : [];
+      const water =
+        waterRaw != null
+          ? (normalizeListPayload(waterRaw) as WaterSystemRow[])
+          : [];
+      const solar =
+        solarRaw != null
+          ? (normalizeListPayload(solarRaw) as SolarSystemRow[])
+          : [];
 
       setRegistryTotals({ water: water.length, solar: solar.length });
 
@@ -292,6 +459,14 @@ export default function SystemsMapCard({ mapFilters, summaryCounts }: SystemsMap
     return () => cancelAnimationFrame(id);
   }, [loading]);
 
+  useEffect(() => {
+    if (!expanded || loading) return;
+    const id = requestAnimationFrame(() => {
+      expandedMapRef.current?.invalidateSize();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [expanded, loading, points]);
+
   const badgeCounts = useMemo(() => {
     if (summaryCounts != null) {
       return { water: summaryCounts.water, solar: summaryCounts.solar };
@@ -299,134 +474,143 @@ export default function SystemsMapCard({ mapFilters, summaryCounts }: SystemsMap
     return { water: registryTotals.water, solar: registryTotals.solar };
   }, [summaryCounts, registryTotals.water, registryTotals.solar]);
 
-  const mapPins = points;
+  const mapBusy = loading || dataSyncing;
 
   const onMapReady = useCallback(() => {
     requestAnimationFrame(() => mapRef.current?.invalidateSize());
   }, []);
 
+  const onExpandedMapReady = useCallback(() => {
+    requestAnimationFrame(() => expandedMapRef.current?.invalidateSize());
+  }, []);
+
+  const previewHeight = compact
+    ? "h-full min-h-[260px] flex-1"
+    : "h-[480px]";
+
   return (
-    <Card className="border-border/80 !overflow-visible">
-      <CardHeader className="gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <CardTitle>Map of sites</CardTitle>
-          <CardDescription>
-            Water (blue) and solar (amber) sites in your filter, on Punjab (green outline) and Pakistan.
-            Counts match &quot;Sites on programme&quot; above. Dashed pins mean the map position is
-            approximate until GPS is saved on the record.
-          </CardDescription>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="gap-1">
-            <Droplets className="size-3.5 text-blue-600" /> Water:{" "}
-            {badgeCounts.water}
-          </Badge>
-          <Badge variant="outline" className="gap-1">
-            <Sun className="size-3.5 text-amber-600" /> Solar: {badgeCounts.solar}
-          </Badge>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void load()}
-            disabled={loading}
-          >
-            Refresh
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-0 overflow-visible px-4">
-        <div className="relative h-[480px] w-full min-w-0 overflow-visible rounded-xl border bg-muted/10 [&_.leaflet-container]:z-0">
-          {loading ? (
-            <div
-              className="absolute left-3 top-3 z-[500] rounded-md border bg-background/95 px-2.5 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm"
-              aria-live="polite"
-            >
-              Loading systems…
-            </div>
-          ) : null}
-          <MapContainer
-            ref={mapRef}
-            center={[30.5, 69.5]}
-            zoom={5}
-            minZoom={5}
-            maxZoom={12}
-            maxBounds={MAP_MAX_BOUNDS_LEAFLET}
-            maxBoundsViscosity={1.0}
-            className="h-[480px] w-full rounded-[inherit]"
-            scrollWheelZoom
-            whenReady={onMapReady}
-          >
-            <TileLayer
-              attribution={TILE_ATTRIBUTION}
-              url={ESRI_WORLD_STREET_TILES}
-            />
-            <ZoomControl position="bottomright" />
-            <MapViewBounds points={mapPins} ready={!loading} />
-
-            <GeoJSON
-              data={pakistanOutline}
-              style={{
-                color: "#94a3b8",
-                weight: 1.2,
-                fillColor: "#64748b",
-                fillOpacity: 0.1,
-                opacity: 0.85,
-              }}
-            />
-            <GeoJSON
-              data={punjabPkBoundary}
-              style={{
-                color: "#047857",
-                weight: 2.5,
-                fillColor: "#10b981",
-                fillOpacity: 0.2,
-                opacity: 1,
-              }}
-            />
-
-            {mapPins.map((p) => (
-              <Marker
-                key={p.id}
-                position={[p.latitude, p.longitude]}
-                icon={createTeardropPinIcon(p)}
-              >
-                <Popup>
-                  <div className="text-sm">
-                    <div className="font-semibold">{p.uid}</div>
-                    <div className="text-muted-foreground">
-                      {[p.village, p.tehsil].filter(Boolean).join(" · ")}
-                    </div>
-                    {p.approximate ? (
-                      <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
-                        Approximate map position — add latitude/longitude on the system record for GPS accuracy.
-                      </p>
-                    ) : null}
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-          </MapContainer>
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Basemap tiles © Esri (World Street). Pakistan outline and Punjab
-          province boundary from{" "}
-          <a
-            href="https://www.naturalearthdata.com/"
-            className="underline underline-offset-2 hover:text-foreground"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Natural Earth
-          </a>{" "}
-          (public domain).
-        </p>
-        {badgeCounts.water + badgeCounts.solar === 0 && !loading ? (
-          <div className="mt-3 rounded-xl border bg-muted/10 p-3 text-sm text-muted-foreground">
-            No water or solar systems in scope for this filter. Widen tehsil/village or register systems for
-            these locations.
+    <>
+      <Card className="flex h-full min-h-[320px] flex-col overflow-hidden border-border/60 shadow-sm">
+        <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0 border-b border-border/40 bg-muted/20 pb-3">
+          <div className="min-w-0 space-y-1">
+            <CardTitle className="text-base">
+              {compact ? "Geographic distribution" : "Map of sites"}
+            </CardTitle>
+            <CardDescription className="text-xs leading-relaxed">
+              {compact
+                ? "Sites in the selected tehsil / village — counts match the footprint panel."
+                : "Water (blue) and solar (amber) in scope. Dashed pins are approximate until GPS is saved."}
+            </CardDescription>
           </div>
-        ) : null}
-      </CardContent>
-    </Card>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+            <Badge
+              variant="outline"
+              className={`gap-1 px-2 py-0 text-xs ${mapBusy ? "opacity-60" : ""}`}
+            >
+              <Droplets className="size-3 text-blue-600" />
+              {mapBusy ? "…" : badgeCounts.water}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={`gap-1 px-2 py-0 text-xs ${mapBusy ? "opacity-60" : ""}`}
+            >
+              <Sun className="size-3 text-amber-600" />
+              {mapBusy ? "…" : badgeCounts.solar}
+            </Badge>
+            {compact ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1 px-2"
+                onClick={() => setExpanded(true)}
+                aria-label="Expand map"
+              >
+                <Maximize2 className="size-3.5" />
+                <span className="hidden sm:inline">Expand</span>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => void load()}
+                disabled={loading}
+              >
+                Refresh
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="flex min-h-0 flex-1 flex-col pt-3">
+          <SystemsMapCanvas
+            mapRef={mapRef}
+            points={points}
+            loading={loading}
+            heightClass={previewHeight}
+            onReady={onMapReady}
+            scopeLabel={scopeLabel}
+            compact={compact}
+            lightBasemap={compact}
+          />
+          {!compact ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Basemap © Esri. Boundaries from Natural Earth.
+            </p>
+          ) : null}
+          {!mapBusy && badgeCounts.water + badgeCounts.solar === 0 ? (
+            <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">
+              No sites in this scope — adjust tehsil or village in the filter bar
+              above.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {compact ? (
+        <Dialog open={expanded} onOpenChange={setExpanded}>
+          <DialogContent
+            className="flex max-h-[92vh] w-[min(96vw,1100px)] max-w-none flex-col gap-3 p-4 sm:p-5"
+            showCloseButton
+          >
+            <DialogHeader>
+              <DialogTitle>Programme site map</DialogTitle>
+              <DialogDescription>
+                {scopeLabel
+                  ? `Showing ${scopeLabel}. Scroll to zoom · click pins for details.`
+                  : "Water (blue) and solar (amber) for the current scope."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex min-h-0 flex-1 flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="gap-1">
+                  <Droplets className="size-3.5 text-blue-600" /> Water:{" "}
+                  {badgeCounts.water}
+                </Badge>
+                <Badge variant="outline" className="gap-1">
+                  <Sun className="size-3.5 text-amber-600" /> Solar:{" "}
+                  {badgeCounts.solar}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void load()}
+                  disabled={loading}
+                >
+                  Refresh
+                </Button>
+              </div>
+              <SystemsMapCanvas
+                mapRef={expandedMapRef}
+                points={points}
+                loading={loading}
+                heightClass="h-[min(68vh,560px)]"
+                onReady={onExpandedMapReady}
+                scopeLabel={scopeLabel}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </>
   );
 }
