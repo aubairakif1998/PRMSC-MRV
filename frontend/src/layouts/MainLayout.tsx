@@ -200,9 +200,7 @@ const MainLayout = () => {
   const roleLabel = roleDisplayLabel(user?.role);
   const roleTitle = tehsilMgr ? "Tehsil Manager Operator" : roleLabel;
   const primaryTehsil = user?.tehsils?.[0] ?? "";
-  const tehsilLabel = primaryTehsil
-    ? primaryTehsil.toUpperCase()
-    : "UNASSIGNED";
+  const tehsilLabel = primaryTehsil ? primaryTehsil.toUpperCase() : "";
   const userInitials = (user?.name ?? "User")
     .split(" ")
     .filter(Boolean)
@@ -229,7 +227,9 @@ const MainLayout = () => {
         const count = list.filter((r) => {
           const raw = r?.certificate?.expiry_date;
           if (!raw) return false;
-          const daysRemaining = pakistanCalendarDayDiff(String(raw).slice(0, 10));
+          const daysRemaining = pakistanCalendarDayDiff(
+            String(raw).slice(0, 10),
+          );
           return daysRemaining <= 7;
         }).length;
 
